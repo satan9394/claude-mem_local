@@ -58,7 +58,7 @@ export abstract class OpenAICompatibleProvider<TConfig extends { apiKey: string;
   }
 
   /** Resolve API key, model, and any per-provider request parameters. */
-  protected abstract getConfig(): TConfig;
+  protected abstract getConfig(session: ActiveSession): TConfig | Promise<TConfig>;
 
   /** Throw a provider-specific "API key not configured" error. */
   protected abstract missingApiKeyError(): Error;
@@ -76,7 +76,7 @@ export abstract class OpenAICompatibleProvider<TConfig extends { apiKey: string;
   protected prepareSessionExtras(_session: ActiveSession, _config: TConfig): void {}
 
   async startSession(session: ActiveSession, worker?: WorkerRef): Promise<void> {
-    const config = this.getConfig();
+    const config = await this.getConfig(session);
     const { apiKey, model } = config;
     session.lastModelId = model;
     this.prepareSessionExtras(session, config);
