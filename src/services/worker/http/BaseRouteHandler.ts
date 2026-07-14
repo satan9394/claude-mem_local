@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { logger } from '../../../utils/logger.js';
 import { AppError } from '../../server/ErrorHandler.js';
 import { normalizePlatformSource } from '../../../shared/platform-source.js';
+import { ProviderConfigError } from '../providers/types.js';
 
 export abstract class BaseRouteHandler {
   protected wrapHandler(
@@ -82,16 +83,16 @@ export abstract class BaseRouteHandler {
   }
 
   protected handleError(res: Response, error: Error, context?: string): void {
-    const statusCode = error instanceof AppError ? error.statusCode : 500;
-    // The local failure line (full fidelity) always fires. The Error payload
-    // routes through logger.error → the error sink → captureException
-    // (Phase 3), which sends a REDACTED $exception to PostHog Error Tracking —
-    // consent-gated, kill-switch-gated, and rate-limited. This replaces the old
-    // enum-only `error_occurred` event with the real (scrubbed) exception, so we
-    // no longer attach a telemetry descriptor here.
+    const statusCode = error instanceof ProviderConfigError
+      ? providerErrorStatus(error.code)
+      : error instanceof AppError ? error.statusCode : 500;
     logger.failure('WORKER', context || 'Request failed', undefined, error);
     if (!res.headersSent) {
       const response: Record<string, unknown> = { error: error.message };
+
+      if (error instanceof ProviderConfigError) {
+        response.code = error.code;
+      }
 
       if (error instanceof AppError && error.code) {
         response.code = error.code;
@@ -104,4 +105,10 @@ export abstract class BaseRouteHandler {
       res.status(statusCode).json(response);
     }
   }
+}
+
+function providerErrorStatus(code: ProviderConfigError['code']): number {
+  if (code === 'CC_SWITCH_NOT_FOUND') return 404;
+  if (['CC_SWITCH_UNHEALTHY', 'CC_SWITCH_REQUEST_FAILED', 'DIRECT_PROVIDER_REQUEST_FAILED'].includes(code)) return 503;
+  return 400;
 }

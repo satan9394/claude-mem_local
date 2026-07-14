@@ -10,7 +10,7 @@ import { ModeManager } from '../../../domain/ModeManager.js';
 import { BaseRouteHandler } from '../BaseRouteHandler.js';
 import { validateBody } from '../middleware/validateBody.js';
 import { SettingsDefaultsManager } from '../../../../shared/SettingsDefaultsManager.js';
-import { clearPortCache } from '../../../../shared/worker-utils.js';
+import { clearPortCache, isLoopbackWorkerHost } from '../../../../shared/worker-utils.js';
 import { snapshotDependencyHealth } from '../../../../shared/dependency-health.js';
 import { parseJsonWithBom, writeJsonFileAtomic } from '../../../../shared/atomic-json.js';
 import {
@@ -198,8 +198,7 @@ export class SettingsRoutes extends BaseRouteHandler {
 
     if (settings.CLAUDE_MEM_WORKER_HOST) {
       const host = settings.CLAUDE_MEM_WORKER_HOST;
-      const validHostPattern = /^(127\.0\.0\.1|localhost|::1)$/;
-      if (!validHostPattern.test(host)) {
+      if (!isLoopbackWorkerHost(host)) {
         return { valid: false, error: 'CLAUDE_MEM_WORKER_HOST must be loopback (127.0.0.1, localhost, or ::1)' };
       }
     }

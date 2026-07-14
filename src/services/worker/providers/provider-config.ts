@@ -33,7 +33,7 @@ const ccSwitchUrlSchema = z.string().superRefine((value, ctx) => {
   }
 });
 
-const profileSchema = z.object({
+export const providerProfileSchema = z.object({
   id: z.string().min(1).max(80).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/),
   name: z.string().trim().min(1).max(120),
   protocol: z.enum(['anthropic', 'openai-compatible']),
@@ -57,7 +57,7 @@ const providerConfigSchema = z.object({
     advancedPortDiscovery: z.boolean(),
     candidatePorts: z.array(z.number().int().min(1024).max(65535)).min(1).max(8),
   }).strict(),
-  providerProfiles: z.array(profileSchema).max(100),
+  providerProfiles: z.array(providerProfileSchema).max(100),
   privacy: z.object({
     localOnly: z.boolean(),
     defaultClassification: classificationSchema,

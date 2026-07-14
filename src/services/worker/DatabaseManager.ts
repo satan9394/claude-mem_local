@@ -1,6 +1,10 @@
 
 import { Database } from 'bun:sqlite';
-import { SessionStore } from '../sqlite/SessionStore.js';
+import {
+  SessionStore,
+  type ProviderAuditInput,
+  type ProviderAuditRow,
+} from '../sqlite/SessionStore.js';
 import { SessionSearch } from '../sqlite/SessionSearch.js';
 import { openConfiguredSqliteDatabase } from '../sqlite/connection.js';
 import { ChromaSync } from '../sync/ChromaSync.js';
@@ -68,6 +72,14 @@ export class DatabaseManager {
       throw new Error('Database not initialized');
     }
     return this.db;
+  }
+
+  recordProviderAudit(input: ProviderAuditInput): number {
+    return this.getSessionStore().recordProviderAudit(input);
+  }
+
+  getRecentProviderAudits(limit?: number): ProviderAuditRow[] {
+    return this.getSessionStore().getRecentProviderAudits(limit);
   }
 
   getSessionById(sessionDbId: number): {

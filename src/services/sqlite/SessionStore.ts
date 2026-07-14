@@ -65,6 +65,39 @@ interface SdkSessionDetailRow {
   status: string;
 }
 
+export interface ProviderAuditInput {
+  action: 'provider_resolve' | 'provider_test' | 'provider_activate' | 'profile_create' | 'profile_update' | 'profile_delete' | 'secret_put' | 'secret_delete' | 'import_preview' | 'import_profiles';
+  providerId?: string;
+  profileId?: string;
+  mode?: 'local' | 'cc-switch-auto' | 'direct';
+  outcome: 'allowed' | 'blocked' | 'success' | 'error';
+  errorCode?: string;
+  classification?: 'public' | 'internal' | 'confidential';
+  redactionCount?: number;
+}
+
+export interface ProviderAuditRow {
+  id: number;
+  created_at: string;
+  created_at_epoch: number;
+  action: ProviderAuditInput['action'];
+  provider_id: string | null;
+  profile_id: string | null;
+  mode: ProviderAuditInput['mode'] | null;
+  outcome: ProviderAuditInput['outcome'];
+  error_code: string | null;
+  classification: ProviderAuditInput['classification'] | null;
+  redaction_count: number;
+}
+
+function auditIdentifier(value: string | undefined): string | null {
+  return value && /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(value) ? value : null;
+}
+
+function auditErrorCode(value: string | undefined): string | null {
+  return value && /^[A-Z][A-Z0-9_]{0,79}$/.test(value) ? value : null;
+}
+
 export class SessionStore {
   public db: Database;
 
@@ -109,6 +142,40 @@ export class SessionStore {
     this.ensurePendingMessagesSessionToolUniqueIndex();
     this.ensureSyncedAtColumns(options.cloudSyncStatePath ?? paths.cloudSyncState());
     this.requeuePromptCloudSyncAfterMapperFix();
+    this.createProviderAuditTable();
+  }
+
+  recordProviderAudit(input: ProviderAuditInput): number {
+    const now = new Date();
+    const result = this.db.prepare(`
+      INSERT INTO provider_audit (
+        created_at, created_at_epoch, action, provider_id, profile_id, mode,
+        outcome, error_code, classification, redaction_count
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      now.toISOString(),
+      now.getTime(),
+      input.action,
+      auditIdentifier(input.providerId),
+      auditIdentifier(input.profileId),
+      input.mode ?? null,
+      input.outcome,
+      auditErrorCode(input.errorCode),
+      input.classification ?? null,
+      Math.max(0, Math.min(1_000_000, Math.trunc(input.redactionCount ?? 0))),
+    );
+    return Number(result.lastInsertRowid);
+  }
+
+  getRecentProviderAudits(limit = 100): ProviderAuditRow[] {
+    const boundedLimit = Math.max(1, Math.min(500, Math.trunc(limit)));
+    return this.db.query(`
+      SELECT id, created_at, created_at_epoch, action, provider_id, profile_id,
+             mode, outcome, error_code, classification, redaction_count
+      FROM provider_audit
+      ORDER BY id DESC
+      LIMIT ?
+    `).all(boundedLimit) as ProviderAuditRow[];
   }
 
   private getIndexColumns(indexName: string): string[] {
@@ -497,6 +564,26 @@ export class SessionStore {
     });
 
     this.db.prepare('INSERT OR IGNORE INTO schema_versions (version, applied_at) VALUES (?, ?)').run(40, new Date().toISOString());
+  }
+
+  private createProviderAuditTable(): void {
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS provider_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TEXT NOT NULL,
+        created_at_epoch INTEGER NOT NULL,
+        action TEXT NOT NULL,
+        provider_id TEXT,
+        profile_id TEXT,
+        mode TEXT,
+        outcome TEXT NOT NULL,
+        error_code TEXT,
+        classification TEXT,
+        redaction_count INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_provider_audit_created_at ON provider_audit(created_at_epoch DESC)');
+    this.db.prepare('INSERT OR IGNORE INTO schema_versions (version, applied_at) VALUES (?, ?)').run(41, new Date().toISOString());
   }
 
   // Rows the standalone cloud-sync client already uploaded (its cursors live in

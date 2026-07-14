@@ -37,6 +37,7 @@ export interface CcSwitchDiscoveryOptions {
   healthTimeoutMs?: number;
   totalTimeoutMs?: number;
   statusCacheTtlMs?: number;
+  getRuntimeOptions?: () => Pick<CcSwitchDiscoveryOptions, 'explicitUrl' | 'advancedPortDiscovery' | 'candidatePorts'>;
 }
 
 function defaultClaudeSettingsReader(): unknown {
@@ -52,7 +53,8 @@ function defaultClaudeSettingsReader(): unknown {
 export class CcSwitchDiscovery {
   private readonly options: Required<Pick<CcSwitchDiscoveryOptions,
     'advancedPortDiscovery' | 'candidatePorts' | 'cachePath' | 'readClaudeSettings' | 'fetch' | 'now' |
-    'healthTimeoutMs' | 'totalTimeoutMs' | 'statusCacheTtlMs'>> & Pick<CcSwitchDiscoveryOptions, 'explicitUrl'>;
+    'healthTimeoutMs' | 'totalTimeoutMs' | 'statusCacheTtlMs'>>
+    & Pick<CcSwitchDiscoveryOptions, 'explicitUrl' | 'getRuntimeOptions'>;
   private readonly statusCache = new Map<string, { expiresAt: number; version?: string }>();
 
   constructor(options: CcSwitchDiscoveryOptions = {}) {
@@ -67,6 +69,7 @@ export class CcSwitchDiscovery {
       healthTimeoutMs: options.healthTimeoutMs ?? 1_200,
       totalTimeoutMs: options.totalTimeoutMs ?? 3_500,
       statusCacheTtlMs: options.statusCacheTtlMs ?? 30_000,
+      getRuntimeOptions: options.getRuntimeOptions,
     };
   }
 
@@ -124,6 +127,7 @@ export class CcSwitchDiscovery {
   }
 
   private buildCandidates(): Candidate[] {
+    const runtime = this.options.getRuntimeOptions?.();
     const candidates: Candidate[] = [];
     const add = (value: unknown, source: CcSwitchDiscoverySource): void => {
       if (typeof value !== 'string' || !isLoopbackUrl(value)) return;
@@ -131,7 +135,7 @@ export class CcSwitchDiscovery {
       if (!candidates.some(candidate => candidate.url === url)) candidates.push({ url, source });
     };
 
-    add(this.options.explicitUrl, 'explicit');
+    add(runtime?.explicitUrl ?? this.options.explicitUrl, 'explicit');
     const settings = this.options.readClaudeSettings();
     if (settings && typeof settings === 'object') {
       const env = (settings as { env?: unknown }).env;
@@ -142,8 +146,8 @@ export class CcSwitchDiscovery {
     add('http://127.0.0.1:15721', 'default');
     add(this.readCache()?.baseUrl, 'cache');
 
-    if (this.options.advancedPortDiscovery) {
-      for (const port of this.options.candidatePorts.slice(0, 8)) {
+    if (runtime?.advancedPortDiscovery ?? this.options.advancedPortDiscovery) {
+      for (const port of (runtime?.candidatePorts ?? this.options.candidatePorts).slice(0, 8)) {
         if (Number.isInteger(port) && port >= 1024 && port <= 65535) {
           add(`http://127.0.0.1:${port}`, 'candidate');
         }

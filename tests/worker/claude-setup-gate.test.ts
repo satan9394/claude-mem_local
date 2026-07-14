@@ -92,9 +92,11 @@ describe('Claude setup-required generator gate', () => {
     const routes = new SessionRoutes(
       sessionManager as any,
       {} as any,
-      claudeProvider as any,
-      { startSession: async () => {} } as any,
-      { startSession: async () => {} } as any,
+      {
+        resolve: () => ({
+          id: 'claude', label: 'Claude SDK', provider: claudeProvider, mode: 'local',
+        }),
+      } as any,
       {} as any,
       {} as any,
       {

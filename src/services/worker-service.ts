@@ -1,6 +1,6 @@
 
 import path from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { spawn } from 'child_process';
 import type { Database } from 'bun:sqlite';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -8,9 +8,10 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { getWorkerPort, getWorkerHost, fetchWithTimeout, resolveWorkerScriptPath } from '../shared/worker-utils.js';
 import { getCurrentWorkerPid, verifyRestartedWorker } from './restart-verify.js';
 import { runShutdownSequence, type WorkerShutdownReason } from './worker-shutdown.js';
-import { DATA_DIR, DB_PATH, ensureDir } from '../shared/paths.js';
+import { DATA_DIR, DB_PATH, USER_SETTINGS_PATH, ensureDir } from '../shared/paths.js';
 import { HOOK_TIMEOUTS } from '../shared/hook-constants.js';
 import { SettingsDefaultsManager } from '../shared/SettingsDefaultsManager.js';
+import { parseJsonWithBom, writeJsonFileAtomic } from '../shared/atomic-json.js';
 import { getAuthMethodDescription } from '../shared/EnvManager.js';
 import { logger } from '../utils/logger.js';
 import { ChromaMcpManager } from './sync/ChromaMcpManager.js';
@@ -75,8 +76,8 @@ import { SessionManager } from './worker/SessionManager.js';
 import { SSEBroadcaster } from './worker/SSEBroadcaster.js';
 import { ClaudeProvider, classifyClaudeError } from './worker/ClaudeProvider.js';
 import type { WorkerRef } from './worker/agents/types.js';
-import { GeminiProvider, classifyGeminiError, isGeminiSelected, isGeminiAvailable } from './worker/GeminiProvider.js';
-import { OpenRouterProvider, classifyOpenRouterError, isOpenRouterSelected, isOpenRouterAvailable } from './worker/OpenRouterProvider.js';
+import { GeminiProvider, isGeminiAvailable } from './worker/GeminiProvider.js';
+import { OpenRouterProvider, isOpenRouterAvailable } from './worker/OpenRouterProvider.js';
 import { ClassifiedProviderError, isClassified, type ProviderErrorClass } from './worker/provider-errors.js';
 import { PaginationHelper } from './worker/PaginationHelper.js';
 import { SettingsManager } from './worker/SettingsManager.js';
@@ -98,6 +99,19 @@ import { LogsRoutes } from './worker/http/routes/LogsRoutes.js';
 import { MemoryRoutes } from './worker/http/routes/MemoryRoutes.js';
 import { CorpusRoutes } from './worker/http/routes/CorpusRoutes.js';
 import { ChromaRoutes } from './worker/http/routes/ChromaRoutes.js';
+import { ProviderRoutes } from './worker/http/routes/ProviderRoutes.js';
+import { PrivacyRoutes } from './worker/http/routes/PrivacyRoutes.js';
+import { CcSwitchDiscovery } from './worker/providers/CcSwitchDiscovery.js';
+import { CcSwitchProvider } from './worker/providers/CcSwitchProvider.js';
+import { DirectOfficialProvider } from './worker/providers/DirectOfficialProvider.js';
+import { ModelCatalogService } from './worker/providers/ModelCatalogService.js';
+import { ProviderConfigImporter } from './worker/providers/ProviderConfigImporter.js';
+import { ProviderHealthService } from './worker/providers/ProviderHealthService.js';
+import { ProviderRegistry } from './worker/providers/ProviderRegistry.js';
+import { ProviderRouter } from './worker/providers/ProviderRouter.js';
+import { SecretStore } from './worker/providers/SecretStore.js';
+import { parseProviderConfig, serializeProviderConfig } from './worker/providers/provider-config.js';
+import type { ProviderConfigV1 } from './worker/providers/types.js';
 
 import { CorpusStore } from './worker/knowledge/CorpusStore.js';
 import { CorpusBuilder } from './worker/knowledge/CorpusBuilder.js';
@@ -148,6 +162,14 @@ export class WorkerService implements WorkerRef {
   private sdkAgent: ClaudeProvider;
   private geminiAgent: GeminiProvider;
   private openRouterAgent: OpenRouterProvider;
+  private ccSwitchAgent: CcSwitchProvider;
+  private directAgent: DirectOfficialProvider;
+  private providerRegistry: ProviderRegistry;
+  private providerRouter: ProviderRouter;
+  private providerHealthService: ProviderHealthService;
+  private providerImporter: ProviderConfigImporter;
+  private modelCatalogService: ModelCatalogService;
+  private secretStore: SecretStore;
   private paginationHelper: PaginationHelper;
   private settingsManager: SettingsManager;
   private sessionEventBroadcaster: SessionEventBroadcaster;
@@ -179,6 +201,45 @@ export class WorkerService implements WorkerRef {
     this.sdkAgent = new ClaudeProvider(this.dbManager, this.sessionManager);
     this.geminiAgent = new GeminiProvider(this.dbManager, this.sessionManager);
     this.openRouterAgent = new OpenRouterProvider(this.dbManager, this.sessionManager);
+    this.secretStore = new SecretStore();
+    const discovery = new CcSwitchDiscovery({
+      getRuntimeOptions: () => {
+        const config = this.loadProviderConfig();
+        return {
+          explicitUrl: config.ccSwitch.explicitUrl,
+          advancedPortDiscovery: config.ccSwitch.advancedPortDiscovery,
+          candidatePorts: config.ccSwitch.candidatePorts,
+        };
+      },
+    });
+    this.ccSwitchAgent = new CcSwitchProvider(this.dbManager, this.sessionManager, {
+      discovery,
+      getProviderConfig: () => this.loadProviderConfig(),
+    });
+    this.directAgent = new DirectOfficialProvider(this.dbManager, this.sessionManager, {
+      getProviderConfig: () => this.loadProviderConfig(),
+      secretStore: this.secretStore,
+    });
+    this.providerRegistry = new ProviderRegistry();
+    this.providerRegistry.register({ id: 'claude', label: 'Claude SDK', provider: this.sdkAgent });
+    this.providerRegistry.register({ id: 'gemini', label: 'Gemini', provider: this.geminiAgent, isAvailable: isGeminiAvailable });
+    this.providerRegistry.register({ id: 'openrouter', label: 'OpenRouter', provider: this.openRouterAgent, isAvailable: isOpenRouterAvailable });
+    this.providerRegistry.register({ id: 'cc-switch', label: 'CC Switch', provider: this.ccSwitchAgent });
+    this.providerRegistry.register({ id: 'direct', label: 'Direct Official', provider: this.directAgent });
+    this.providerRouter = new ProviderRouter(
+      this.providerRegistry,
+      () => this.loadProviderConfig(),
+      input => {
+        if (this.initializationCompleteFlag) this.dbManager.recordProviderAudit(input);
+      },
+    );
+    this.providerHealthService = new ProviderHealthService({
+      router: this.providerRouter,
+      getProviderConfig: () => this.loadProviderConfig(),
+      discovery,
+    });
+    this.providerImporter = new ProviderConfigImporter({ secretStore: this.secretStore });
+    this.modelCatalogService = new ModelCatalogService({ secretStore: this.secretStore });
 
     this.paginationHelper = new PaginationHelper(this.dbManager);
     this.settingsManager = new SettingsManager(this.dbManager);
@@ -211,9 +272,12 @@ export class WorkerService implements WorkerRef {
       onRestart: () => this.shutdown('restart'),
       workerPath: __filename,
       getAiStatus: () => {
-        let provider = 'claude';
-        if (isOpenRouterSelected() && isOpenRouterAvailable()) provider = 'openrouter';
-        else if (isGeminiSelected() && isGeminiAvailable()) provider = 'gemini';
+        let provider = 'unavailable';
+        try {
+          provider = this.providerRouter.activeProviderId();
+        } catch {
+          // Detailed provider diagnostics are exposed by the local provider API.
+        }
         return {
           provider,
           authMethod: getAuthMethodDescription(),
@@ -286,18 +350,58 @@ export class WorkerService implements WorkerRef {
     });
 
     this.server.registerRoutes(new ViewerRoutes(this.sseBroadcaster, this.dbManager, this.sessionManager));
-    const sessionRoutes = new SessionRoutes(this.sessionManager, this.dbManager, this.sdkAgent, this.geminiAgent, this.openRouterAgent, this.sessionEventBroadcaster, this, this.completionHandler);
+    const sessionRoutes = new SessionRoutes(
+      this.sessionManager,
+      this.dbManager,
+      this.providerRouter,
+      this.sessionEventBroadcaster,
+      this,
+      this.completionHandler,
+    );
     this.server.registerRoutes(sessionRoutes);
     attachIngestGeneratorStarter((sessionDbId, source) =>
       sessionRoutes.ensureGeneratorRunning(sessionDbId, source),
     );
     this.server.registerRoutes(new DataRoutes(this.paginationHelper, this.dbManager, this.sessionManager, this.sseBroadcaster, this, this.startTime));
     this.server.registerRoutes(new SettingsRoutes(this.settingsManager));
+    const audit = {
+      record: (input: Parameters<DatabaseManager['recordProviderAudit']>[0]) => { this.dbManager.recordProviderAudit(input); },
+      list: (limit?: number) => this.dbManager.getRecentProviderAudits(limit),
+    };
+    this.server.registerRoutes(new ProviderRoutes({
+      getConfig: () => this.loadProviderConfig(),
+      saveConfig: config => this.saveProviderConfig(config),
+      healthService: this.providerHealthService,
+      modelCatalog: this.modelCatalogService,
+      importer: this.providerImporter,
+      secretStore: this.secretStore,
+      audit,
+    }));
+    this.server.registerRoutes(new PrivacyRoutes({
+      getConfig: () => this.loadProviderConfig(),
+      saveConfig: config => this.saveProviderConfig(config),
+      audit,
+    }));
     this.server.registerRoutes(new LogsRoutes());
     this.server.registerRoutes(new MemoryRoutes(this.dbManager, 'claude-mem'));
     this.server.registerRoutes(new ServerV1Routes({
       getDatabase: () => this.dbManager.getConnection(),
     }));
+  }
+
+  private loadProviderConfig(): ProviderConfigV1 {
+    const settings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
+    return parseProviderConfig(settings.CLAUDE_MEM_PROVIDER_CONFIG, settings.CLAUDE_MEM_PROVIDER);
+  }
+
+  private saveProviderConfig(config: ProviderConfigV1): void {
+    const settings = existsSync(USER_SETTINGS_PATH)
+      ? parseJsonWithBom(readFileSync(USER_SETTINGS_PATH, 'utf8')) as Record<string, unknown>
+      : {};
+    settings.CLAUDE_MEM_PROVIDER_CONFIG = serializeProviderConfig(config);
+    settings.CLAUDE_MEM_PROVIDER = config.legacyProvider;
+    ensureDir(path.dirname(USER_SETTINGS_PATH));
+    writeJsonFileAtomic(USER_SETTINGS_PATH, settings);
   }
 
   async start(): Promise<void> {

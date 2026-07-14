@@ -73,6 +73,7 @@ export interface ImportProfilesOptions {
   confirmImport: boolean;
   copyApiKeys: boolean;
   confirmApiKeyCopy?: 'COPY_API_KEYS';
+  existingProfileIds?: string[];
 }
 
 export interface ProviderConfigImporterOptions {
@@ -125,7 +126,7 @@ export class ProviderConfigImporter {
     }
 
     const parsed = this.parseRows(await this.readSource(source));
-    const usedIds = new Set<string>();
+    const usedIds = new Set(options.existingProfileIds ?? []);
     const profiles: ProviderProfile[] = [];
     for (const item of parsed) {
       const id = uniqueProfileId(item.sourceId, usedIds);

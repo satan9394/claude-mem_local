@@ -7,9 +7,6 @@ import { logger } from '../../../../utils/logger.js';
 import { stripMemoryTags, isInternalProtocolPayload } from '../../../../utils/tag-stripping.js';
 import { SessionManager } from '../../SessionManager.js';
 import { DatabaseManager } from '../../DatabaseManager.js';
-import { ClaudeProvider } from '../../ClaudeProvider.js';
-import { GeminiProvider, isGeminiSelected, isGeminiAvailable } from '../../GeminiProvider.js';
-import { OpenRouterProvider, isOpenRouterSelected, isOpenRouterAvailable } from '../../OpenRouterProvider.js';
 import type { WorkerService } from '../../../worker-service.js';
 import { BaseRouteHandler } from '../BaseRouteHandler.js';
 import { SessionEventBroadcaster } from '../../events/SessionEventBroadcaster.js';
@@ -31,6 +28,8 @@ import {
 import { findClaudeExecutable } from '../../../../shared/find-claude-executable.js';
 import { isClassified } from '../../provider-errors.js';
 import { classifyClaudeError } from '../../ClaudeProvider.js';
+import type { ProviderSelection } from '../../providers/ProviderRouter.js';
+import { ProviderRouter } from '../../providers/ProviderRouter.js';
 
 const MAX_USER_PROMPT_BYTES = 256 * 1024;
 
@@ -56,9 +55,7 @@ export class SessionRoutes extends BaseRouteHandler {
   constructor(
     private sessionManager: SessionManager,
     private dbManager: DatabaseManager,
-    private sdkAgent: ClaudeProvider,
-    private geminiAgent: GeminiProvider,
-    private openRouterAgent: OpenRouterProvider,
+    private providerRouter: ProviderRouter,
     private eventBroadcaster: SessionEventBroadcaster,
     private workerService: WorkerService,
     private completionHandler: SessionCompletionHandler,
@@ -66,21 +63,14 @@ export class SessionRoutes extends BaseRouteHandler {
     super();
   }
 
-  private getSelectedProvider(): 'claude' | 'gemini' | 'openrouter' {
-    if (isOpenRouterSelected() && isOpenRouterAvailable()) {
-      return 'openrouter';
-    }
-    return (isGeminiSelected() && isGeminiAvailable()) ? 'gemini' : 'claude';
-  }
-
   public async ensureGeneratorRunning(sessionDbId: number, source: string): Promise<void> {
     const session = this.sessionManager.getSession(sessionDbId);
     if (!session) return;
 
-    const selectedProvider = this.getSelectedProvider();
+    const selection = this.providerRouter.resolve(session.project);
 
     if (!session.generatorPromise) {
-      if (selectedProvider === 'claude') {
+      if (selection.id === 'claude') {
         const claudeStatus = getDependencyStatus('claude_cli');
         if (claudeStatus?.kind === 'setup_required') {
           if (isDependencyStatusInCooldown(claudeStatus, CLAUDE_CLI_SETUP_RECHECK_COOLDOWN_MS)) {
@@ -117,15 +107,15 @@ export class SessionRoutes extends BaseRouteHandler {
         }
       }
       await this.applyTierRouting(session);
-      await this.startGeneratorWithProvider(session, selectedProvider, source);
+      await this.startGeneratorWithProvider(session, selection, source);
       return;
     }
 
-    if (session.currentProvider && session.currentProvider !== selectedProvider) {
+    if (session.currentProvider && session.currentProvider !== selection.id) {
       logger.info('SESSION', `Provider changed, will switch after current generator finishes`, {
         sessionId: sessionDbId,
         currentProvider: session.currentProvider,
-        selectedProvider,
+        selectedProvider: selection.id,
         historyLength: session.conversationHistory.length
       });
       // Let current generator finish naturally, next one will use new provider
@@ -135,7 +125,7 @@ export class SessionRoutes extends BaseRouteHandler {
 
   private async startGeneratorWithProvider(
     session: ReturnType<typeof this.sessionManager.getSession>,
-    provider: 'claude' | 'gemini' | 'openrouter',
+    selection: ProviderSelection,
     source: string
   ): Promise<void> {
     if (!session) return;
@@ -147,8 +137,7 @@ export class SessionRoutes extends BaseRouteHandler {
       session.abortController = new AbortController();
     }
 
-    const agent = provider === 'openrouter' ? this.openRouterAgent : (provider === 'gemini' ? this.geminiAgent : this.sdkAgent);
-    const agentName = provider === 'openrouter' ? 'OpenRouter' : (provider === 'gemini' ? 'Gemini' : 'Claude SDK');
+    const { id: provider, label: agentName, provider: agent } = selection;
 
     const actualQueueDepth = this.sessionManager.getMessageBuffer().getPendingCount(session.sessionDbId);
 

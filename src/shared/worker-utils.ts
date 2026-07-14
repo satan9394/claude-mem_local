@@ -139,8 +139,20 @@ export function getWorkerHost(): string {
   }
 
   const settings = getWorkerSettings();
+  if (!isLoopbackWorkerHost(settings.CLAUDE_MEM_WORKER_HOST)) {
+    throw new Error('CLAUDE_MEM_WORKER_HOST must be a loopback address');
+  }
   cachedHost = settings.CLAUDE_MEM_WORKER_HOST;
   return cachedHost;
+}
+
+export function isLoopbackWorkerHost(host: string): boolean {
+  const normalized = host.toLowerCase().replace(/^\[|\]$/g, '');
+  if (normalized === 'localhost' || normalized === '::1') return true;
+  const octets = normalized.split('.').map(Number);
+  return octets.length === 4
+    && octets[0] === 127
+    && octets.every(octet => Number.isInteger(octet) && octet >= 0 && octet <= 255);
 }
 
 export function getWorkerApiRequestTimeoutMs(): number {
