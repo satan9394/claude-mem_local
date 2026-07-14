@@ -1,0 +1,73 @@
+name: Watch upstream releases
+
+on:
+  schedule:
+    - cron: '17 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  detect:
+    name: Detect a new stable upstream release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare the reviewed base with upstream
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const base = JSON.parse(fs.readFileSync('.github/upstream-base.json', 'utf8'));
+            const [owner, repo] = base.repository.split('/');
+            const latest = await github.rest.repos.getLatestRelease({ owner, repo });
+
+            if (latest.data.tag_name === base.tag) {
+              core.info(`Reviewed upstream base is current: ${base.tag}`);
+              return;
+            }
+
+            const title = `[Upstream sync] Review ${latest.data.tag_name}`;
+            const openIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            if (openIssues.data.some((issue) => issue.title === title)) {
+              core.info(`Review issue already exists: ${title}`);
+              return;
+            }
+
+            const upstreamCommit = await github.rest.repos.getCommit({
+              owner,
+              repo,
+              ref: latest.data.tag_name,
+            });
+            const body = [
+              'A new stable Claude-Mem upstream release requires a security-gated review.',
+              '',
+              `- Upstream: https://github.com/${base.repository}`,
+              `- Reviewed base: ${base.tag} (${base.commit})`,
+              `- Latest release: ${latest.data.tag_name} (${upstreamCommit.data.sha})`,
+              `- Release notes: ${latest.data.html_url}`,
+              '',
+              '## Required classification',
+              '',
+              '- [ ] Directly synchronize safe local behavior',
+              '- [ ] Adapt shared network, installer, provider, or lifecycle behavior',
+              '- [ ] Reject Cloud Sync, telemetry, implicit egress, plaintext secrets, silent fallback, and fail-open behavior',
+              '- [ ] Run the complete local-only and release verification gates',
+              '',
+              'This watcher is advisory only. No merge, tag, package, or release automation is authorized.',
+            ].join('\n');
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+            });
