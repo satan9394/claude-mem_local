@@ -54,7 +54,7 @@
     <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License">
   </a>
   <a href="package.json">
-    <img src="https://img.shields.io/badge/version-13.11.0-green.svg" alt="Version">
+    <img src="https://img.shields.io/badge/version-13.11.0--local.1-green.svg" alt="Version">
   </a>
   <a href="package.json">
     <img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg" alt="Node">
@@ -65,7 +65,7 @@
 > [!IMPORTANT]
 > This is an independent, source-first fork of [thedotmack/claude-mem](https://github.com/thedotmack/claude-mem), not an official Claude-Mem release. Its defining boundary is local-only operation: Cloud Sync and telemetry are hard-disabled. The only allowed model egress is the provider explicitly selected by the user.
 >
-> This first public scope covers local provider routing, privacy controls, diagnostics, and audit metadata. Multi-Agent support, a Cloud Mem replacement, and automatic upstream synchronization are not implemented yet.
+> This first public scope covers local provider routing, privacy controls, diagnostics, and audit metadata. Multi-Agent support and a Cloud Mem replacement are not implemented. Upstream release detection is advisory; synchronization and publication always require security review and human approval.
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> •
@@ -92,7 +92,7 @@ Build and run the local Worker from source:
 ```bash
 git clone https://github.com/satan9394/claude-mem_local.git
 cd claude-mem_local
-npm ci --no-audit --no-fund
+npm install --no-audit --no-fund
 npm run build
 npm run typecheck
 npm run worker:start
@@ -214,6 +214,8 @@ See [Search Tools Guide](https://docs.claude-mem.ai/usage/search-tools) for deta
 ## Release Branches
 
 This repository is currently distributed from source and does not publish the `claude-mem` npm package. The upstream project's `main`, `core-dev`, and `community-edge` release model does not describe this fork.
+
+Local releases use `vX.Y.Z-local.N`: `X.Y.Z` records the reviewed upstream base and `N` counts local releases on that base. A scheduled watcher reports newer stable upstream releases, but every change passes a security-gated upstream review before it can enter this fork. Cloud Sync, telemetry, implicit egress, plaintext secrets, silent provider fallback, and fail-open behavior are rejected.
 
 ---
 

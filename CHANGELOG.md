@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [13.11.0-local.1] - 2026-07-14
+
 ### Claude-Mem Local × CC Switch
 
 - Added recommended loopback-only CC Switch discovery and Anthropic `/v1/messages` routing with proxy-managed placeholder authentication, dynamic Claude live-config ports, health caching, stable errors, and fail-closed queue behavior.
