@@ -309,6 +309,16 @@ Settings are managed in `~/.claude-mem/settings.json` (auto-created with default
 
 See the **[Configuration Guide](https://docs.claude-mem.ai/configuration)** for all available settings and examples.
 
+### Local provider routing
+
+This local distribution adds a versioned provider layer inside the existing Viewer Settings:
+
+- **CC Switch auto** (recommended) discovers a healthy loopback Claude proxy and follows its active provider through `POST /v1/messages` without copying the real API key.
+- **Direct Official API** supports Anthropic and OpenAI-compatible endpoints, encrypted local secrets, model lookup with manual fallback, synthetic connection tests, and explicit egress confirmation.
+- **Legacy compatibility** preserves existing Claude SDK, Gemini, and OpenRouter settings without becoming an automatic failure fallback.
+
+Cloud Sync and telemetry are hard-disabled in this distribution. Start with [CC Switch setup](docs/cc-switch-setup.md), then review [Direct official providers](docs/direct-official-providers.md), [local-only security](docs/local-only-security.md), and [troubleshooting](docs/cc-switch-troubleshooting.md).
+
 ### Mode & Language Configuration
 
 Claude-Mem supports multiple workflow modes and languages via the `CLAUDE_MEM_MODE` setting.

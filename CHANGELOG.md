@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Claude-Mem Local × CC Switch
+
+- Added recommended loopback-only CC Switch discovery and Anthropic `/v1/messages` routing with proxy-managed placeholder authentication, dynamic Claude live-config ports, health caching, stable errors, and fail-closed queue behavior.
+- Added versioned Direct profiles for Anthropic and OpenAI-compatible official/local endpoints, DPAPI-first SecretStore, model catalogs with manual fallback, synthetic connection tests, profile deletion, and explicit remote-egress confirmation.
+- Added safe CC Switch metadata import from official schema-13 SQL exports or detached read-only SQLite snapshots; API-key copy requires a separate explicit confirmation.
+- Added ProviderRegistry/ProviderRouter, strict provider/privacy APIs, payload sanitization, redirect-aware egress enforcement, project privacy classes, schema-41 redacted provider audit metadata, and Settings/Doctor UI.
+- Hard-disabled cmem.ai Cloud Sync, PostHog telemetry/error capture/backfill, install telemetry prompts, and online signup in this local distribution. The Viewer no longer makes an automatic GitHub API request.
+- Preserved legacy Claude SDK, Gemini, and OpenRouter configuration migration. CC Switch or Direct failure never silently falls back to them.
+- Added Windows fake-server, port-coexistence, clean-room, DPAPI, responsive Viewer, and local-only regression coverage.
+
 ## [13.11.0] - 2026-07-13
 
 ## Worker-native cloud sync (PR #3182)
