@@ -317,7 +317,6 @@ async function syncAndBroadcastObservations(
       }, error);
     });
 
-    dbManager.getCloudSync()?.notify();
 
     broadcastObservation(worker, {
       id: obsId,
@@ -404,7 +403,6 @@ async function syncAndBroadcastSummary(
     }, error);
   });
 
-  dbManager.getCloudSync()?.notify();
 
   broadcastSummary(worker, {
     id: result.summaryId,

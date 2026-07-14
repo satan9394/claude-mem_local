@@ -1,6 +1,6 @@
 
 import path from 'path';
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import { existsSync } from 'fs';
 import { spawn } from 'child_process';
 import type { Database } from 'bun:sqlite';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -10,7 +10,6 @@ import { getCurrentWorkerPid, verifyRestartedWorker } from './restart-verify.js'
 import { runShutdownSequence, type WorkerShutdownReason } from './worker-shutdown.js';
 import { DATA_DIR, DB_PATH, ensureDir } from '../shared/paths.js';
 import { HOOK_TIMEOUTS } from '../shared/hook-constants.js';
-import { getUptimeSeconds } from '../shared/uptime.js';
 import { SettingsDefaultsManager } from '../shared/SettingsDefaultsManager.js';
 import { getAuthMethodDescription } from '../shared/EnvManager.js';
 import { logger } from '../utils/logger.js';
@@ -23,10 +22,6 @@ import { sanitizeEnv } from '../supervisor/env-sanitizer.js';
 import { ensureWorkerStarted as ensureWorkerStartedShared, type WorkerStartResult } from './worker-spawner.js';
 import { acquireSpawnLock, releaseSpawnLock } from '../shared/worker-spawn-gate.js';
 import { snapshotDependencyHealth, type DependencyHealthSnapshot } from '../shared/dependency-health.js';
-import { captureEvent, captureException, shutdownTelemetry, enableExceptionAutocaptureForWorker } from './telemetry/telemetry.js';
-import { telemetryBuffer } from './telemetry/buffer.js';
-import { collectInstallStats } from './telemetry/install-stats.js';
-import { runHistoricalBackfill } from './telemetry/backfill.js';
 import { runWorkerDependencyPreflight } from './worker/dependency-preflight.js';
 
 export { isPluginDisabledInClaudeSettings } from '../shared/plugin-state.js';
@@ -103,7 +98,6 @@ import { LogsRoutes } from './worker/http/routes/LogsRoutes.js';
 import { MemoryRoutes } from './worker/http/routes/MemoryRoutes.js';
 import { CorpusRoutes } from './worker/http/routes/CorpusRoutes.js';
 import { ChromaRoutes } from './worker/http/routes/ChromaRoutes.js';
-import { CloudSyncRoutes } from './worker/http/routes/CloudSyncRoutes.js';
 
 import { CorpusStore } from './worker/knowledge/CorpusStore.js';
 import { CorpusBuilder } from './worker/knowledge/CorpusBuilder.js';
@@ -136,68 +130,12 @@ export function buildStatusOutput(
   return output;
 }
 
-// Closed enum for worker_stopped telemetry — definition (and its
-// scrub.ts/telemetry.mdx sync requirements) moved to worker-shutdown.ts, the
-// import-safe shutdown seam. Re-exported here for existing importers.
+// Re-exported here for existing importers.
 export type { WorkerShutdownReason } from './worker-shutdown.js';
-
-// Clean-shutdown sentinel — same marker-file pattern as the one-time markers
-// in ProcessManager.ts (.chroma-cleaned-v10.3). Written in the graceful
-// shutdown path, consumed (read + deleted) at the next startup: sentinel
-// present = previous run stopped cleanly; stale PID file with no sentinel =
-// previous run died without reaching the graceful-shutdown path (crash).
-const CLEAN_SHUTDOWN_SENTINEL_PATH = path.join(DATA_DIR, '.worker-clean-shutdown');
-
-function writeCleanShutdownSentinel(): void {
-  try {
-    ensureDir(DATA_DIR);
-    writeFileSync(CLEAN_SHUTDOWN_SENTINEL_PATH, new Date().toISOString());
-  } catch (error: unknown) {
-    // [ANTI-PATTERN IGNORED]: sentinel is best-effort crash-detection metadata; a failed write must not abort graceful shutdown. Logged at warn with path; worst case the next boot reports 'crash' instead of 'clean'.
-    if (error instanceof Error) {
-      logger.warn('SYSTEM', 'Failed to write clean-shutdown sentinel', { path: CLEAN_SHUTDOWN_SENTINEL_PATH }, error);
-    } else {
-      logger.warn('SYSTEM', 'Failed to write clean-shutdown sentinel', { path: CLEAN_SHUTDOWN_SENTINEL_PATH }, new Error(String(error)));
-    }
-  }
-}
-
-function readAndClearCleanShutdownSentinel(): string | null {
-  if (!existsSync(CLEAN_SHUTDOWN_SENTINEL_PATH)) return null;
-
-  let contents: string | null = null;
-  try {
-    contents = readFileSync(CLEAN_SHUTDOWN_SENTINEL_PATH, 'utf-8').trim();
-  } catch (error: unknown) {
-    // [ANTI-PATTERN IGNORED]: sentinel read is best-effort crash-detection metadata; startup must proceed even if the sentinel is unreadable. Logged at warn with path; falls through to the delete, and the caller sees contents=null.
-    if (error instanceof Error) {
-      logger.warn('SYSTEM', 'Failed to read clean-shutdown sentinel', { path: CLEAN_SHUTDOWN_SENTINEL_PATH }, error);
-    } else {
-      logger.warn('SYSTEM', 'Failed to read clean-shutdown sentinel', { path: CLEAN_SHUTDOWN_SENTINEL_PATH }, new Error(String(error)));
-    }
-  }
-  try {
-    // Always delete after reading: a stale sentinel would mislabel a later
-    // crash as 'clean'.
-    unlinkSync(CLEAN_SHUTDOWN_SENTINEL_PATH);
-  } catch (error: unknown) {
-    // [ANTI-PATTERN IGNORED]: sentinel delete is best-effort; startup must proceed even if the unlink fails. Logged at warn with path; worst case a stale sentinel mislabels one later crash as 'clean'.
-    if (error instanceof Error) {
-      logger.warn('SYSTEM', 'Failed to remove clean-shutdown sentinel', { path: CLEAN_SHUTDOWN_SENTINEL_PATH }, error);
-    } else {
-      logger.warn('SYSTEM', 'Failed to remove clean-shutdown sentinel', { path: CLEAN_SHUTDOWN_SENTINEL_PATH }, new Error(String(error)));
-    }
-  }
-  return contents;
-}
 
 export class WorkerService implements WorkerRef {
   private server: Server;
   private startTime: number = Date.now();
-  // Crash detection (worker_started telemetry): derived once at startup from
-  // the previous run's stale PID file + the clean-shutdown sentinel.
-  private previousShutdown: 'clean' | 'crash' | 'unknown' = 'unknown';
-  private previousUptimeSeconds: number | null = null;
   private mcpClient: Client;
 
   private mcpReady: boolean = false;
@@ -362,55 +300,9 @@ export class WorkerService implements WorkerRef {
     }));
   }
 
-  /**
-   * Crash detection for worker_started telemetry. Must run BEFORE
-   * startSupervisor() — whose validateWorkerPidFile() deletes the previous
-   * run's stale PID file — and before writePidFile overwrites it.
-   *   - clean-shutdown sentinel present → previous run stopped gracefully
-   *   - stale PID file present, no sentinel → previous run crashed
-   *   - neither (first run, or the spawner already cleaned the stale PID
-   *     file) → unknown
-   * The sentinel is consumed here so it can never mislabel a later crash.
-   */
-  private detectPreviousShutdown(): void {
-    const stalePidInfo = readPidFile();
-    const sentinelTimestamp = readAndClearCleanShutdownSentinel();
-
-    if (sentinelTimestamp !== null) {
-      this.previousShutdown = 'clean';
-      // Previous uptime = previous run's PID-file startedAt → sentinel write
-      // time. The previous run's in-memory startTime is never persisted, so
-      // the PID file is the only source; omit when either side is missing.
-      const startedAtMs = stalePidInfo ? Date.parse(stalePidInfo.startedAt) : NaN;
-      const stoppedAtMs = Date.parse(sentinelTimestamp);
-      if (Number.isFinite(startedAtMs) && Number.isFinite(stoppedAtMs) && stoppedAtMs >= startedAtMs) {
-        this.previousUptimeSeconds = Math.floor((stoppedAtMs - startedAtMs) / 1000);
-      }
-    } else if (stalePidInfo) {
-      // Crash: the previous run's stop time is unknowable, so
-      // previous_uptime_seconds is deliberately omitted rather than guessed.
-      this.previousShutdown = 'crash';
-    } else {
-      this.previousShutdown = 'unknown';
-    }
-  }
-
   async start(): Promise<void> {
     const port = getWorkerPort();
     const host = getWorkerHost();
-
-    // Phase 3 telemetry: bridge logged errors into PostHog Error Tracking
-    // WITHOUT the logger importing telemetry (no import cycle). captureException
-    // enforces consent + kill-switch + rate-limit internally and never throws.
-    // enableExceptionAutocaptureForWorker() must run BEFORE the first capture
-    // constructs the client, since enableExceptionAutocapture is read at
-    // construction — so it is set here at the very top of worker start.
-    enableExceptionAutocaptureForWorker();
-    logger.setErrorSink((err) => captureException(err));
-
-    // Must run before startSupervisor(): its validateWorkerPidFile() removes
-    // the dead previous run's stale PID file, which crash detection needs.
-    this.detectPreviousShutdown();
 
     await startSupervisor();
 
@@ -429,10 +321,6 @@ export class WorkerService implements WorkerRef {
     });
 
     logger.info('SYSTEM', 'Worker started', { host, port, pid: process.pid });
-    // worker_started telemetry fires at the end of initializeBackground, once
-    // the DB is up: that lets the event carry the install's IDE (read from
-    // session history) as a person property, so IDE-level DAU/retention
-    // breakdowns are non-null for installs that never re-run the installer.
 
     this.initializeBackground().catch((error) => {
       logger.error('SYSTEM', 'Background initialization failed', {}, error as Error);
@@ -527,73 +415,9 @@ export class WorkerService implements WorkerRef {
       this.server.registerRoutes(new CorpusRoutes(this.corpusStore, corpusBuilder, knowledgeAgent));
       logger.info('WORKER', 'CorpusRoutes registered');
 
-      // Cloud sync status endpoint. Registered late (SearchRoutes pattern)
-      // because it reads dbManager.getCloudSync(), which exists only after
-      // dbManager.initialize() above — and unconditionally, so an
-      // unconfigured install answers {configured: false} instead of 404.
-      this.server.registerRoutes(new CloudSyncRoutes(this.dbManager));
-      logger.info('WORKER', 'CloudSyncRoutes registered');
-
       this.initializationCompleteFlag = true;
       this.resolveInitialization();
       logger.info('SYSTEM', 'Core initialization complete (DB + search ready)');
-
-      // Lifecycle telemetry (person profile = anonymous install UUID). ide is
-      // this install's dominant client read from session history — a bounded
-      // platform enum (claude-code / cursor / ...), never user data. Props are
-      // rebuilt per capture so the daily heartbeat reports the install's
-      // current DB size/age/activity, not boot-time values.
-      const buildLifecycleProps = (): Record<string, unknown> => {
-        const props: Record<string, unknown> = {
-          runtime_mode: 'worker',
-          provider: settings.CLAUDE_MEM_PROVIDER,
-          mode: settings.CLAUDE_MEM_MODE,
-        };
-        try {
-          const row = this.dbManager.getConnection()
-            .query(`SELECT platform_source FROM sdk_sessions
-                    WHERE platform_source IS NOT NULL AND platform_source != ''
-                    ORDER BY id DESC LIMIT 1`)
-            .get() as { platform_source?: string } | null;
-          if (row?.platform_source) props.ide = row.platform_source;
-        } catch (error) {
-          // [ANTI-PATTERN IGNORED]: telemetry enrichment is best-effort — the worker_started event must ship even without the ide property. Expected only before the schema exists; logged at debug so anything else (e.g. the wrong-table query this once masked) stays diagnosable.
-          logger.debug('SYSTEM', 'ide lookup for lifecycle telemetry failed', {}, error instanceof Error ? error : new Error(String(error)));
-        }
-        try {
-          Object.assign(props, collectInstallStats(this.dbManager.getConnection()));
-        } catch (error) {
-          // [ANTI-PATTERN IGNORED]: install-stats snapshot is best-effort telemetry enrichment; the lifecycle event still ships without it. Logged at debug for diagnosability.
-          logger.debug('SYSTEM', 'Install stats snapshot failed', {}, error instanceof Error ? error : new Error(String(error)));
-        }
-        // Process health for the daily heartbeat: memoryUsage() returns bytes;
-        // the scrubber drops non-finite numbers, so round to whole MiB.
-        const memory = process.memoryUsage();
-        props.process_rss_mb = Math.round(memory.rss / 1024 / 1024);
-        props.heap_used_mb = Math.round(memory.heapUsed / 1024 / 1024);
-        return props;
-      };
-      captureEvent('worker_started', {
-        trigger: 'start',
-        duration_ms: Date.now() - this.startTime,
-        // Crash detection (detectPreviousShutdown): crash case carries no
-        // previous_uptime_seconds — the stop time is unknowable.
-        previous_shutdown: this.previousShutdown,
-        ...(this.previousUptimeSeconds !== null && { previous_uptime_seconds: this.previousUptimeSeconds }),
-        ...buildLifecycleProps(),
-      }, { person: true });
-      telemetryBuffer.start();
-
-      // One-time historical telemetry backfill (anonymized daily rollups).
-      // Fire-and-forget: gated internally by the backfill.json marker and the
-      // same consent checks as live telemetry; a failed run retries on the
-      // next worker start because no marker is written.
-      // runHistoricalBackfill never rejects by contract (its body is fully
-      // try/caught), so this .catch is an unhandled-rejection backstop that
-      // keeps the worker alive if that contract ever regresses.
-      runHistoricalBackfill(this.dbManager.getConnection()).catch(error => {
-        logger.error('SYSTEM', 'Telemetry historical backfill failed (non-blocking)', {}, error as Error);
-      });
 
       await this.startTranscriptWatcher(settings);
 
@@ -604,12 +428,6 @@ export class WorkerService implements WorkerRef {
           logger.error('CHROMA_SYNC', 'Backfill failed (non-blocking)', {}, error as Error);
         });
       }
-
-      // Cloud sync startup drain (non-blocking). The database is the queue:
-      // everything unsynced is simply `synced_at IS NULL`, so this one kick
-      // IS backfill, offline catch-up, and retry. Null when no token/user id
-      // is configured (DatabaseManager gates construction).
-      this.dbManager.getCloudSync()?.start();
 
       const mcpServerPath = path.join(__dirname, 'mcp-server.cjs');
       this.mcpReady = existsSync(mcpServerPath);
@@ -745,16 +563,6 @@ export class WorkerService implements WorkerRef {
           this.transcriptWatcher = null;
           logger.info('TRANSCRIPT', 'Transcript watcher stopped');
         }
-
-        // Mark this stop as graceful for the next start's crash detection, and
-        // capture worker_stopped BEFORE shutdownTelemetry() — isShutdown drops
-        // any event captured after the flush, by design.
-        writeCleanShutdownSentinel();
-        captureEvent('worker_stopped', {
-          uptime_seconds: getUptimeSeconds(this.startTime),
-          shutdown_reason: reason,
-        });
-        await shutdownTelemetry();
       },
       performGracefulShutdown: () => performGracefulShutdown({
         server: this.server.getHttpServer(),

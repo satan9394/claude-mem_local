@@ -40,7 +40,6 @@ ${styleText('bold', 'Runtime Commands')} (requires Bun, delegates to installed p
   ${styleText('cyan', 'npx claude-mem restart')}              Restart worker service
   ${styleText('cyan', 'npx claude-mem status')}               Show worker status
   ${styleText('cyan', 'npx claude-mem doctor')}               Diagnose install/runtime health (bun, uv, worker)
-  ${styleText('cyan', 'npx claude-mem telemetry status|enable|disable')}   Manage anonymous telemetry (on by default, opt-out)
   ${styleText('cyan', 'npx claude-mem server start')}         Start server service
   ${styleText('cyan', 'npx claude-mem server stop')}          Stop server service
   ${styleText('cyan', 'npx claude-mem server restart')}       Restart server service
@@ -165,12 +164,6 @@ async function main(): Promise<void> {
     case 'doctor': {
       const { runDoctorCommand } = await import('./commands/doctor.js');
       await runDoctorCommand();
-      break;
-    }
-
-    case 'telemetry': {
-      const { runTelemetryCommand } = await import('./commands/telemetry.js');
-      await runTelemetryCommand(args.slice(1));
       break;
     }
 
