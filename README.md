@@ -1,6 +1,6 @@
 <h1 align="center">
   <br>
-  <a href="https://github.com/thedotmack/claude-mem">
+  <a href="https://github.com/satan9394/claude-mem_local">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/thedotmack/claude-mem/main/docs/public/claude-mem-logo-for-dark-mode.webp">
       <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/thedotmack/claude-mem/main/docs/public/claude-mem-logo-for-light-mode.webp">
@@ -8,10 +8,9 @@
     </picture>
   </a>
   <br>
-  <a href="https://vercel.com/open-source-program">
-    <img alt="Vercel OSS Program" src="https://vercel.com/oss/program-badge-2026.svg" />
-  </a>
 </h1>
+
+<h2 align="center">Claude-Mem Local</h2>
 
 <p align="center">
   <a href="docs/i18n/README.zh.md">🇨🇳 中文</a> •
@@ -48,69 +47,25 @@
   <a href="docs/i18n/README.no.md">🇳🇴 Norsk</a>
 </p>
 
-<h4 align="center">Persistent memory compression system built for <a href="https://claude.com/claude-code" target="_blank">Claude Code</a>.</h4>
+<h4 align="center">Local-first persistent memory and provider routing for <a href="https://claude.com/claude-code" target="_blank">Claude Code</a>.</h4>
 
 <p align="center">
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License">
   </a>
   <a href="package.json">
-    <img src="https://img.shields.io/badge/version-13.4.0-green.svg" alt="Version">
+    <img src="https://img.shields.io/badge/version-13.11.0-green.svg" alt="Version">
   </a>
   <a href="package.json">
     <img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg" alt="Node">
   </a>
-  <a href="https://github.com/thedotmack/awesome-claude-code">
-    <img src="https://awesome.re/mentioned-badge.svg" alt="Mentioned in Awesome Claude Code">
-  </a>
+  <img src="https://img.shields.io/badge/network-local--only-2ea44f.svg" alt="Local-only network policy">
 </p>
 
-<p align="center">
-  <a href="https://trendshift.io/repositories/15496" target="_blank">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/thedotmack/claude-mem/main/docs/public/trendshift-badge-dark.svg">
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/thedotmack/claude-mem/main/docs/public/trendshift-badge.svg">
-      <img src="https://raw.githubusercontent.com/thedotmack/claude-mem/main/docs/public/trendshift-badge.svg" alt="thedotmack/claude-mem | Trendshift" width="250" height="55"/>
-    </picture>
-  </a>
-</p>
-
-<br>
-
-<table align="center">
-  <tr>
-    <td align="center">
-      <a href="https://github.com/thedotmack/claude-mem">
-        <picture>
-          <img
-            src="https://raw.githubusercontent.com/thedotmack/claude-mem/main/docs/public/cm-preview.gif"
-            alt="Claude-Mem Preview"
-            width="500"
-          >
-        </picture>
-      </a>
-    </td>
-    <td align="center">
-      <a href="https://www.star-history.com/#thedotmack/claude-mem&Date">
-        <picture>
-          <source
-            media="(prefers-color-scheme: dark)"
-            srcset="https://api.star-history.com/image?repos=thedotmack/claude-mem&type=date&theme=dark&legend=top-left"
-          />
-          <source
-            media="(prefers-color-scheme: light)"
-            srcset="https://api.star-history.com/image?repos=thedotmack/claude-mem&type=date&legend=top-left"
-          />
-          <img
-            alt="Star History Chart"
-            src="https://api.star-history.com/image?repos=thedotmack/claude-mem&type=date&legend=top-left"
-            width="500"
-          />
-        </picture>
-      </a>
-    </td>
-  </tr>
-</table>
+> [!IMPORTANT]
+> This is an independent, source-first fork of [thedotmack/claude-mem](https://github.com/thedotmack/claude-mem), not an official Claude-Mem release. Its defining boundary is local-only operation: Cloud Sync and telemetry are hard-disabled. The only allowed model egress is the provider explicitly selected by the user.
+>
+> This first public scope covers local provider routing, privacy controls, diagnostics, and audit metadata. Multi-Agent support, a Cloud Mem replacement, and automatic upstream synchronization are not implemented yet.
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> •
@@ -130,45 +85,21 @@
 
 ## Quick Start
 
-Install with a single command:
+This fork is not published under a separate npm package or marketplace namespace. Commands such as `npx claude-mem install` and `/plugin marketplace add thedotmack/claude-mem` install the upstream project, not this repository.
+
+Build and run the local Worker from source:
 
 ```bash
-npx claude-mem install
+git clone https://github.com/satan9394/claude-mem_local.git
+cd claude-mem_local
+npm ci --no-audit --no-fund
+npm run build
+npm run typecheck
+npm run worker:start
+npm run worker:status
 ```
 
-Or install for OpenCode:
-
-```bash
-npx claude-mem install --ide opencode
-```
-
-Or install for Antigravity CLI ([setup guide](https://docs.claude-mem.ai/antigravity-cli/setup)):
-
-```bash
-npx claude-mem install --ide antigravity
-```
-
-Or install from the plugin marketplace inside Claude Code:
-
-```bash
-/plugin marketplace add thedotmack/claude-mem
-
-/plugin install claude-mem
-```
-
-Restart Claude Code. Context from previous sessions will automatically appear in new sessions.
-
-> **Note:** Claude-Mem is also published on npm, but `npm install -g claude-mem` installs the **SDK/library only** — it does not register the plugin hooks or set up the worker service. Always install via `npx claude-mem install` or the `/plugin` commands above.
-
-### 🦞 OpenClaw Gateway
-
-Install claude-mem as a persistent memory plugin on [OpenClaw](https://openclaw.ai) gateways with a single command:
-
-```bash
-curl -fsSL https://install.cmem.ai/openclaw.sh | bash
-```
-
-The installer handles dependencies, plugin setup, AI provider configuration, worker startup, and optional real-time observation feeds to Telegram, Discord, Slack, and more. See the [OpenClaw Integration Guide](https://docs.claude-mem.ai/openclaw-integration) for details.
+The source workflow starts the Worker but does not replace an existing upstream plugin registration. Review the local provider and security guides before connecting a real account or API key.
 
 **Key Features:**
 
@@ -181,19 +112,26 @@ The installer handles dependencies, plugin setup, AI provider configuration, wor
 - ⚙️ **Context Configuration** - Fine-grained control over what context gets injected
 - 🤖 **Automatic Operation** - No manual intervention required
 - 🔗 **Citations** - Reference past observations with IDs through the worker API or view all in the web viewer
+- 🔌 **Local Provider Routing** - CC Switch auto-discovery or an explicitly configured official API
+- 🚫 **No Cloud Sync or Telemetry** - Enforced local-only policy with auditable provider requests
 
 ---
 
 ## Documentation
 
-📚 **[View Full Documentation](https://docs.claude-mem.ai/)** - Browse on official website
+The upstream documentation describes the inherited core. The following local guides are authoritative for this fork's provider and privacy behavior:
+
+- **[CC Switch setup](docs/cc-switch-setup.md)** - Discover and follow a loopback CC Switch provider
+- **[Direct official providers](docs/direct-official-providers.md)** - Configure Anthropic or OpenAI-compatible endpoints
+- **[Local-only security](docs/local-only-security.md)** - Egress, secret-storage, and project-privacy boundaries
+- **[Troubleshooting](docs/cc-switch-troubleshooting.md)** - Provider diagnostics and recovery
 
 ### Getting Started
 
 - **[Installation Guide](https://docs.claude-mem.ai/installation)** - Quick start & advanced installation
 - **[Usage Guide](https://docs.claude-mem.ai/usage/getting-started)** - How Claude-Mem works automatically
 - **[Search Tools](https://docs.claude-mem.ai/usage/search-tools)** - Query your project history with natural language
-- **[Cloud Sync](https://docs.claude-mem.ai/cloud-sync)** - Back up your memories to cmem.ai — no daemon, the worker syncs on write
+- **Cloud Sync** - Not available in this fork; sync routes and runtime behavior are removed
 
 ### Best Practices
 
@@ -275,10 +213,7 @@ See [Search Tools Guide](https://docs.claude-mem.ai/usage/search-tools) for deta
 
 ## Release Branches
 
-Stable releases ship from `main` and are published to npm. `core-dev` and
-`community-edge` are source-run branches for early reliability fixes and
-community integrations. See **[Release Branches](https://docs.claude-mem.ai/branches)**
-for the branch flow and non-stable run instructions.
+This repository is currently distributed from source and does not publish the `claude-mem` npm package. The upstream project's `main`, `core-dev`, and `community-edge` release model does not describe this fork.
 
 ---
 
@@ -376,12 +311,7 @@ See the **[Troubleshooting Guide](https://docs.claude-mem.ai/troubleshooting)** 
 
 ## Bug Reports
 
-Create comprehensive bug reports with the automated generator:
-
-```bash
-cd ~/.claude/plugins/marketplaces/thedotmack
-npm run bug-report
-```
+Report fork-specific problems in [satan9394/claude-mem_local issues](https://github.com/satan9394/claude-mem_local/issues). Reproduce the problem without including API keys, credentials, private prompts, or local database contents.
 
 ## Contributing
 
@@ -393,12 +323,7 @@ Contributions are welcome! Please:
 4. Update documentation
 5. Submit a Pull Request
 
-Claude-Mem ships from three branches: `main` (stable), `core-dev`, and
-`community-edge`. Only `main` is published to npm; the others are run from
-source. See [Release Branches](https://docs.claude-mem.ai/branches) for the
-strategy and local run instructions.
-
-See [Development Guide](https://docs.claude-mem.ai/development) for contribution workflow.
+See the upstream [Development Guide](https://docs.claude-mem.ai/development) for the inherited build workflow, then run this repository's full test suite before submitting a change.
 
 ---
 
@@ -421,20 +346,11 @@ open/commercial boundary.
 ## Support
 
 - **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/thedotmack/claude-mem/issues)
-- **Repository**: [github.com/thedotmack/claude-mem](https://github.com/thedotmack/claude-mem)
-- **Official X Account**: [@Claude_Memory](https://x.com/Claude_Memory)
-- **Official Discord**: [Join Discord](https://discord.com/invite/J4wttp9vDu)
-- **Author**: Alex Newman ([@thedotmack](https://github.com/thedotmack))
+- **Fork issues**: [satan9394/claude-mem_local/issues](https://github.com/satan9394/claude-mem_local/issues)
+- **Fork repository**: [satan9394/claude-mem_local](https://github.com/satan9394/claude-mem_local)
+- **Upstream project**: [thedotmack/claude-mem](https://github.com/thedotmack/claude-mem)
+- **Upstream author**: Alex Newman ([@thedotmack](https://github.com/thedotmack))
 
 ---
 
 **Built with Claude Agent SDK** | **Works with Claude Code** | **Made with TypeScript**
-
----
-
-### What About CMEM?
-
-CMEM is a token created by a 3rd party but officially embraced by the creator of Claude-Mem (Alex Newman, @thedotmack). The token acts as a community catalyst for growth and a vehicle for bringing CMEM to the developers and knowledge workers that need it most.
-
-Official BASE CA: 0x76b1967eec0ccaeb001bbbb2b40dc4badba31ba3
