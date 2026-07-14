@@ -32,23 +32,12 @@ async function httpRequestToWorker(
   return { ok: response.ok, statusCode: response.status, body };
 }
 
-export async function isPortInUse(port: number): Promise<boolean> {
-  if (process.platform === 'win32') {
-    try {
-      const response = await fetch(`http://${formatHostForUrl(getWorkerHost())}:${port}/api/health`);
-      return response.ok;
-    } catch (error) {
-      if (error instanceof Error) {
-        logger.debug('SYSTEM', 'Windows health check failed (port not in use)', {}, error);
-      } else {
-        logger.debug('SYSTEM', 'Windows health check failed (port not in use)', { error: String(error) });
-      }
-      return false;
-    }
-  }
-
+export async function isPortInUse(
+  port: number,
+  createServer: () => net.Server = () => net.createServer(),
+): Promise<boolean> {
   return new Promise((resolve) => {
-    const server = net.createServer();
+    const server = createServer();
     const workerHost = getWorkerHost();
     server.once('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EADDRINUSE') {
@@ -95,10 +84,14 @@ export function waitForReadiness(port: number, timeoutMs: number = 30000): Promi
   return pollEndpointUntilOk(port, '/api/readiness', timeoutMs, 'Worker not ready yet, will retry');
 }
 
-export async function waitForPortFree(port: number, timeoutMs: number = 10000): Promise<boolean> {
+export async function waitForPortFree(
+  port: number,
+  timeoutMs: number = 10000,
+  createServer: () => net.Server = () => net.createServer(),
+): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (!(await isPortInUse(port))) return true;
+    if (!(await isPortInUse(port, createServer))) return true;
     await new Promise(r => setTimeout(r, 500));
   }
   return false;

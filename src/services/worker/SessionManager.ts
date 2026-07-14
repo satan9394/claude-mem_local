@@ -256,12 +256,18 @@ export class SessionManager {
       const generatorDone = session.generatorPromise.catch(() => {
         logger.debug('SYSTEM', 'Generator already failed, cleaning up', { sessionId: session.sessionDbId });
       });
-      const timeoutDone = new Promise<void>(resolve => {
-        AbortSignal.timeout(30_000).addEventListener('abort', () => resolve(), { once: true });
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const timeoutDone = new Promise<'timeout'>(resolve => {
+        timeout = setTimeout(() => resolve('timeout'), 30_000);
       });
-      await Promise.race([generatorDone, timeoutDone]).then(() => {}, () => {
+      const winner = await Promise.race([
+        generatorDone.then(() => 'generator' as const),
+        timeoutDone,
+      ]);
+      if (timeout) clearTimeout(timeout);
+      if (winner === 'timeout') {
         logger.warn('SESSION', 'Generator did not exit within 30s after abort, forcing cleanup (#1099)', { sessionDbId });
-      });
+      }
     }
 
     const tracked = getSdkProcessForSession(sessionDbId);

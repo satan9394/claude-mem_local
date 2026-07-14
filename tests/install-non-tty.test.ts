@@ -215,15 +215,10 @@ describe('Install Non-TTY Support', () => {
       expect(resolverRegion).toContain("'codex.cmd'");
     });
 
-    it('probes Claude Code version through the shared no-shell Windows invocation', () => {
-      const versionProbeRegion = installSource.slice(
-        installSource.indexOf('function readClaudeCodeVersionOutput'),
-        installSource.indexOf('function detectClaudeCodeVersion'),
-      );
-      expect(versionProbeRegion).toContain("lookupWindowsCommand('claude') ?? 'claude.cmd'");
-      expect(versionProbeRegion).toContain('buildSpawnSyncInvocation(command, [');
-      expect(versionProbeRegion).not.toContain("shell: process.platform === 'win32'");
-      expect(versionProbeRegion).not.toContain('shell: IS_WINDOWS');
+    it('keeps installer child processes on shared hidden, no-shell invocation paths', () => {
+      expect(installSource).toContain('spawnHidden');
+      expect(installSource).not.toContain("shell: process.platform === 'win32'");
+      expect(installSource).not.toContain('shell: IS_WINDOWS');
     });
 
     it('writes install markers for both the marketplace and executable plugin roots', () => {

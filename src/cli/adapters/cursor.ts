@@ -10,9 +10,11 @@ import { AdapterRejectedInput, isValidCwd } from './errors.js';
  *
  *   ~/.cursor/projects/<workspace-slug>/agent-transcripts/<UUID>/<UUID>.jsonl
  *
- * where <workspace-slug> is the absolute cwd with the leading slash stripped
- * and any '/' or '.' replaced with '-' (e.g. /Users/foo.bar/workspaces ->
- * Users-foo-bar-workspaces). Returns undefined if the file does not exist.
+ * where <workspace-slug> is the absolute cwd with the leading slash and Windows
+ * drive colon stripped, then separators and dots replaced with '-' (e.g.
+ * /Users/foo.bar/workspaces -> Users-foo-bar-workspaces and
+ * /c:/Users/foo/workspaces -> c-Users-foo-workspaces). Returns undefined if the
+ * file does not exist.
  */
 // Cursor session ids are UUID-style identifiers. Restrict to a safe character
 // set so a malicious sessionId from stdin cannot escape ~/.cursor/projects via
@@ -22,7 +24,11 @@ const SAFE_SESSION_ID_RE = /^[A-Za-z0-9_-]+$/;
 export function deriveCursorTranscriptPath(cwd: string | undefined, sessionId: string | undefined): string | undefined {
   if (!cwd || !sessionId) return undefined;
   if (!SAFE_SESSION_ID_RE.test(sessionId)) return undefined;
-  const slug = cwd.replace(/^\//, '').replace(/[/.]/g, '-');
+  const slug = cwd
+    .replace(/\\/g, '/')
+    .replace(/^\//, '')
+    .replace(/:/g, '')
+    .replace(/[/.]/g, '-');
   const candidate = join(homedir(), '.cursor', 'projects', slug, 'agent-transcripts', sessionId, `${sessionId}.jsonl`);
   return existsSync(candidate) ? candidate : undefined;
 }

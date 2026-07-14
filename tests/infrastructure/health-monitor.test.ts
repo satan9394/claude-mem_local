@@ -1,5 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test';
-import net from 'net';
+import { describe, it, expect, afterEach, mock } from 'bun:test';
 import {
   isPortInUse,
   waitForHealth,
@@ -34,14 +33,10 @@ describe('HealthMonitor', () => {
         listen: mock(() => {})
       }));
       
-      const spy = spyOn(net, 'createServer').mockImplementation(createServerMock as any);
-
-      const result = await isPortInUse(37777);
+      const result = await isPortInUse(37777, createServerMock as any);
 
       expect(result).toBe(true);
-      expect(net.createServer).toHaveBeenCalled();
-      
-      spy.mockRestore();
+      expect(createServerMock).toHaveBeenCalled();
     });
 
     it('should return false for free port (listening succeeds)', async () => {
@@ -56,15 +51,11 @@ describe('HealthMonitor', () => {
         close: closeMock
       }));
       
-      const spy = spyOn(net, 'createServer').mockImplementation(createServerMock as any);
-
-      const result = await isPortInUse(39999);
+      const result = await isPortInUse(39999, createServerMock as any);
 
       expect(result).toBe(false);
-      expect(net.createServer).toHaveBeenCalled();
+      expect(createServerMock).toHaveBeenCalled();
       expect(closeMock).toHaveBeenCalled();
-      
-      spy.mockRestore();
     });
 
     it('should honor configured worker host when probing port occupancy', async () => {
@@ -81,14 +72,11 @@ describe('HealthMonitor', () => {
         close: closeMock
       }));
 
-      const spy = spyOn(net, 'createServer').mockImplementation(createServerMock as any);
-
-      const result = await isPortInUse(37777);
+      const result = await isPortInUse(37777, createServerMock as any);
 
       expect(result).toBe(false);
       expect(listenMock).toHaveBeenCalledWith(37777, '127.0.0.2');
 
-      spy.mockRestore();
     });
 
     it('should return false for other socket errors', async () => {
@@ -101,13 +89,9 @@ describe('HealthMonitor', () => {
         listen: mock(() => {})
       }));
       
-      const spy = spyOn(net, 'createServer').mockImplementation(createServerMock as any);
-
-      const result = await isPortInUse(37777);
+      const result = await isPortInUse(37777, createServerMock as any);
 
       expect(result).toBe(false);
-      
-      spy.mockRestore();
     });
   });
 
@@ -281,15 +265,12 @@ describe('HealthMonitor', () => {
         listen: mock(() => {}),
         close: mock((cb: Function) => cb())
       }));
-      const spy = spyOn(net, 'createServer').mockImplementation(createServerMock as any);
-
       const start = Date.now();
-      const result = await waitForPortFree(39999, 5000);
+      const result = await waitForPortFree(39999, 5000, createServerMock as any);
       const elapsed = Date.now() - start;
 
       expect(result).toBe(true);
       expect(elapsed).toBeLessThan(1000);
-      spy.mockRestore();
     });
 
     it('should timeout when port remains occupied', async () => {
@@ -299,21 +280,18 @@ describe('HealthMonitor', () => {
         }),
         listen: mock(() => {})
       }));
-      const spy = spyOn(net, 'createServer').mockImplementation(createServerMock as any);
-
       const start = Date.now();
-      const result = await waitForPortFree(37777, 1500);
+      const result = await waitForPortFree(37777, 1500, createServerMock as any);
       const elapsed = Date.now() - start;
 
       expect(result).toBe(false);
       expect(elapsed).toBeGreaterThanOrEqual(1400);
       expect(elapsed).toBeLessThan(2500);
-      spy.mockRestore();
     });
 
     it('should succeed when port becomes free', async () => {
       let callCount = 0;
-      const spy = spyOn(net, 'createServer').mockImplementation(() => ({
+      const createServerMock = mock(() => ({
         once: mock((event: string, cb: Function) => {
           callCount++;
           if (callCount < 3) {
@@ -326,11 +304,10 @@ describe('HealthMonitor', () => {
         close: mock((cb: Function) => cb())
       } as any));
 
-      const result = await waitForPortFree(37777, 5000);
+      const result = await waitForPortFree(37777, 5000, createServerMock as any);
 
       expect(result).toBe(true);
       expect(callCount).toBeGreaterThanOrEqual(3);
-      spy.mockRestore();
     });
 
     it('should use default timeout when not specified', async () => {
@@ -341,12 +318,9 @@ describe('HealthMonitor', () => {
         listen: mock(() => {}),
         close: mock((cb: Function) => cb())
       }));
-      const spy = spyOn(net, 'createServer').mockImplementation(createServerMock as any);
-
-      const result = await waitForPortFree(39999);
+      const result = await waitForPortFree(39999, 10000, createServerMock as any);
 
       expect(result).toBe(true);
-      spy.mockRestore();
     });
   });
 });

@@ -8,6 +8,7 @@ export const API_ENDPOINTS = {
   PROVIDER_DISCOVER: '/api/providers/discover',
   PROVIDER_TEST: '/api/providers/test',
   PROVIDER_PROFILES: '/api/providers/profiles',
+  PROVIDER_MODELS: (profileId: string) => `/api/providers/${encodeURIComponent(profileId)}/models`,
   PROVIDER_ACTIVATE: '/api/providers/activate',
   PROVIDER_SECRETS: '/api/providers/secrets',
   PROVIDER_IMPORT_CONNECTION: '/api/providers/import/connection',

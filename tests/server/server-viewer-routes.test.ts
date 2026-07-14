@@ -22,6 +22,13 @@ function baseOptions(): ServerOptions {
   };
 }
 
+async function listenOnEphemeralPort(server: Server): Promise<number> {
+  await server.listen(0, '127.0.0.1');
+  const address = server.getHttpServer()?.address();
+  if (!address || typeof address === 'string') throw new Error('Expected an ephemeral TCP port');
+  return address.port;
+}
+
 describe('ServerViewerRoutes on the server runtime (#2552)', () => {
   let server: Server | null = null;
   let spies: ReturnType<typeof spyOn>[] = [];
@@ -54,8 +61,7 @@ describe('ServerViewerRoutes on the server runtime (#2552)', () => {
     server.registerRoutes(new ServerViewerRoutes());
     server.finalizeRoutes();
 
-    const port = 42000 + Math.floor(Math.random() * 9000);
-    await server.listen(port, '127.0.0.1');
+    const port = await listenOnEphemeralPort(server);
 
     // The co-mounted API route still resolves (compat/v1 layer reachable).
     const apiRes = await fetch(`http://127.0.0.1:${port}/v1/info`);

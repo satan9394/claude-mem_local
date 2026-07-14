@@ -1,6 +1,7 @@
 import type { ActiveSession, ConversationMessage } from '../../worker-types.js';
 import type { DatabaseManager } from '../DatabaseManager.js';
 import type { SessionManager } from '../SessionManager.js';
+import type { ProviderAuditInput } from '../../sqlite/SessionStore.js';
 import { ClassifiedProviderError } from '../provider-errors.js';
 import { parseRetryAfterMs, withRetry } from '../retry.js';
 import { EgressPolicy } from '../security/EgressPolicy.js';
@@ -9,7 +10,7 @@ import { ProjectPrivacyPolicy } from '../security/ProjectPrivacyPolicy.js';
 import { isLoopbackUrl } from '../security/network-address.js';
 import { HttpConversationProvider, type ProviderQueryResult } from './HttpConversationProvider.js';
 import type { SecretStore } from './SecretStore.js';
-import { ProviderConfigError, type ProviderConfigV1, type ProviderProfile } from './types.js';
+import { ProviderConfigError, providerErrorCodeFromError, type ProviderConfigV1, type ProviderProfile } from './types.js';
 
 interface DirectConfig {
   apiKey: string;
@@ -24,6 +25,7 @@ export interface DirectOfficialProviderOptions {
   secretStore: Pick<SecretStore, 'get'>;
   fetch?: typeof fetch;
   sensitivePaths?: string[];
+  audit?: (input: ProviderAuditInput) => void;
 }
 
 export function officialRequestUrl(profile: ProviderProfile): string {
@@ -107,6 +109,8 @@ export class DirectOfficialProvider extends HttpConversationProvider<DirectConfi
     };
     const sanitized = PayloadSanitizer.sanitize(rawPayload, { sensitivePaths: this.options.sensitivePaths });
     this.sanitizerReport = sanitized.report;
+    const requestChars = JSON.stringify(sanitized.payload).length;
+    const startedAt = Date.now();
     const policy = new EgressPolicy({
       allowedOrigin: config.profile.baseUrl,
       allowLoopback: isLoopbackUrl(config.profile.baseUrl),
@@ -115,7 +119,8 @@ export class DirectOfficialProvider extends HttpConversationProvider<DirectConfi
     });
     const url = officialRequestUrl(config.profile);
 
-    const responseData = await withRetry<Record<string, unknown>>(async signal => {
+    try {
+      const responseData = await withRetry<Record<string, unknown>>(async signal => {
       let response: Response;
       try {
         response = await policy.fetch(url, {
@@ -146,11 +151,28 @@ export class DirectOfficialProvider extends HttpConversationProvider<DirectConfi
       } catch {
         throw new ProviderConfigError('DIRECT_PROVIDER_REQUEST_FAILED', 'provider response was not valid JSON');
       }
-    }, { label: `Direct ${config.profile.id}` });
+      }, { label: `Direct ${config.profile.id}` });
 
-    return config.profile.protocol === 'anthropic'
-      ? this.parseAnthropic(responseData)
-      : this.parseOpenAI(responseData);
+      const result = config.profile.protocol === 'anthropic'
+        ? this.parseAnthropic(responseData)
+        : this.parseOpenAI(responseData);
+      this.options.audit?.({
+        action: 'provider_request', providerId: 'direct', profileId: config.profile.id,
+        mode: 'direct', outcome: 'success', classification: ProjectPrivacyPolicy.classify(config.project, config.privacy),
+        redactionCount: sanitized.report.redactedCount, model: result.servedModel ?? config.model,
+        protocol: config.profile.protocol, requestChars, latencyMs: Date.now() - startedAt,
+        inputTokens: result.inputTokens, outputTokens: result.outputTokens,
+      });
+      return result;
+    } catch (error) {
+      this.options.audit?.({
+        action: 'provider_request', providerId: 'direct', profileId: config.profile.id,
+        mode: 'direct', outcome: 'error', classification: ProjectPrivacyPolicy.classify(config.project, config.privacy),
+        redactionCount: sanitized.report.redactedCount, model: config.model, protocol: config.profile.protocol,
+        requestChars, latencyMs: Date.now() - startedAt, errorCode: providerErrorCodeFromError(error),
+      });
+      throw error;
+    }
   }
 
   private async resolveConfig(project: string): Promise<DirectConfig> {

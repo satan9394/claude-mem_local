@@ -80,7 +80,13 @@ describe('runOneTimeV12_4_3Cleanup', () => {
 
   afterEach(() => {
     restoreLogger();
-    rmSync(tmpDataDir, { recursive: true, force: true });
+    try {
+      rmSync(tmpDataDir, { recursive: true, force: true });
+    } catch (error) {
+      // ponytail: Bun can retain Windows WAL handles until process exit (oven-sh/bun#25964).
+      if (process.platform === 'win32' && (error as NodeJS.ErrnoException).code === 'EBUSY') return;
+      throw error;
+    }
   });
 
   it('writes a no-db marker when the DB is missing', () => {

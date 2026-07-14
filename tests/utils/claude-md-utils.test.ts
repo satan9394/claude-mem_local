@@ -376,6 +376,7 @@ describe('updateFolderClaudeMdFiles', () => {
   });
 
   it('should resolve relative paths using projectRoot', async () => {
+    const projectRoot = join(tempDir, 'my-project');
     const apiResponse = {
       content: [{
         text: '| #123 | 4:30 PM | 🔵 | Test observation | ~100 |'
@@ -392,12 +393,12 @@ describe('updateFolderClaudeMdFiles', () => {
       ['src/utils/file.ts'],  // relative path
       'test-project',
       37777,
-      '/home/user/my-project'  
+      projectRoot
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const callUrl = (fetchMock.mock.calls[0] as unknown[])[0] as string;
-    expect(callUrl).toContain(encodeURIComponent('/home/user/my-project/src/utils'));
+    expect(callUrl).toContain(encodeURIComponent(join(projectRoot, 'src', 'utils')));
   });
 
   it('should accept absolute paths within projectRoot and use them directly', async () => {
@@ -457,6 +458,7 @@ describe('updateFolderClaudeMdFiles', () => {
   });
 
   it('should handle projectRoot with trailing slash correctly', async () => {
+    const projectRoot = join(tempDir, 'my-project');
     const apiResponse = {
       content: [{
         text: '| #123 | 4:30 PM | 🔵 | Test observation | ~100 |'
@@ -473,12 +475,12 @@ describe('updateFolderClaudeMdFiles', () => {
       ['src/utils/file.ts'],
       'test-project',
       37777,
-      '/home/user/my-project/'  
+      `${projectRoot}${path.sep}`
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const callUrl = (fetchMock.mock.calls[0] as unknown[])[0] as string;
-    expect(callUrl).toContain(encodeURIComponent('/home/user/my-project/src/utils'));
+    expect(callUrl).toContain(encodeURIComponent(join(projectRoot, 'src', 'utils')));
     expect(callUrl.replace('http://', '')).not.toContain('//');
   });
 
@@ -513,6 +515,7 @@ describe('updateFolderClaudeMdFiles', () => {
   });
 
   it('should deduplicate relative paths from same folder with projectRoot', async () => {
+    const projectRoot = join(tempDir, 'project');
     const apiResponse = {
       content: [{
         text: '| #123 | 4:30 PM | 🔵 | Test | ~100 |'
@@ -529,15 +532,16 @@ describe('updateFolderClaudeMdFiles', () => {
       ['src/utils/file1.ts', 'src/utils/file2.ts', 'src/utils/file3.ts'],
       'test-project',
       37777,
-      '/home/user/project'
+      projectRoot
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const callUrl = (fetchMock.mock.calls[0] as unknown[])[0] as string;
-    expect(callUrl).toContain(encodeURIComponent('/home/user/project/src/utils'));
+    expect(callUrl).toContain(encodeURIComponent(join(projectRoot, 'src', 'utils')));
   });
 
   it('should handle empty string paths gracefully with projectRoot', async () => {
+    const projectRoot = join(tempDir, 'project');
     // The empty strings are filtered out, leaving one valid folder that
     // triggers exactly one fetch — which then reads the JSON body, so the
     // mock must provide json() like a real ok Response.
@@ -551,12 +555,12 @@ describe('updateFolderClaudeMdFiles', () => {
       ['', 'src/file.ts', ''],  // includes empty strings
       'test-project',
       37777,
-      '/home/user/project'
+      projectRoot
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const callUrl = (fetchMock.mock.calls[0] as unknown[])[0] as string;
-    expect(callUrl).toContain(encodeURIComponent('/home/user/project/src'));
+    expect(callUrl).toContain(encodeURIComponent(join(projectRoot, 'src')));
   });
 });
 
@@ -760,34 +764,37 @@ describe('issue #814 - reject consecutive duplicate path segments', () => {
 
 describe('issue #859 - skip folders with active CLAUDE.md', () => {
   it('should skip folder when CLAUDE.md was read in observation', async () => {
+    const projectRoot = join(tempDir, 'project');
     const fetchMock = mock(() => Promise.resolve({ ok: true } as Response));
     global.fetch = fetchMock;
 
     await updateFolderClaudeMdFiles(
-      ['/project/src/utils/CLAUDE.md'],
+      [join(projectRoot, 'src', 'utils', 'CLAUDE.md')],
       'test-project',
       37777,
-      '/project'
+      projectRoot
     );
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('should skip folder when CLAUDE.md was modified in observation', async () => {
+    const projectRoot = join(tempDir, 'project');
     const fetchMock = mock(() => Promise.resolve({ ok: true } as Response));
     global.fetch = fetchMock;
 
     await updateFolderClaudeMdFiles(
-      ['/project/src/CLAUDE.md'],
+      [join(projectRoot, 'src', 'CLAUDE.md')],
       'test-project',
       37777,
-      '/project'
+      projectRoot
     );
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('should process other folders even when one has active CLAUDE.md', async () => {
+    const projectRoot = join(tempDir, 'project');
     const apiResponse = {
       content: [{ text: '| #123 | 4:30 PM | 🔵 | Test | ~100 |' }]
     };
@@ -799,21 +806,22 @@ describe('issue #859 - skip folders with active CLAUDE.md', () => {
 
     await updateFolderClaudeMdFiles(
       [
-        '/project/src/utils/CLAUDE.md',  // Should skip /project/src/utils
-        '/project/src/services/api.ts'   
+        join(projectRoot, 'src', 'utils', 'CLAUDE.md'),
+        join(projectRoot, 'src', 'services', 'api.ts')
       ],
       'test-project',
       37777,
-      '/project'
+      projectRoot
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const callUrl = (fetchMock.mock.calls[0] as unknown[])[0] as string;
-    expect(callUrl).toContain(encodeURIComponent('/project/src/services'));
-    expect(callUrl).not.toContain(encodeURIComponent('/project/src/utils'));
+    expect(callUrl).toContain(encodeURIComponent(join(projectRoot, 'src', 'services')));
+    expect(callUrl).not.toContain(encodeURIComponent(join(projectRoot, 'src', 'utils')));
   });
 
   it('should handle relative CLAUDE.md paths with projectRoot', async () => {
+    const projectRoot = join(tempDir, 'project');
     const fetchMock = mock(() => Promise.resolve({ ok: true } as Response));
     global.fetch = fetchMock;
 
@@ -821,13 +829,14 @@ describe('issue #859 - skip folders with active CLAUDE.md', () => {
       ['src/components/CLAUDE.md'],
       'test-project',
       37777,
-      '/project'
+      projectRoot
     );
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('should skip only the specific folder containing active CLAUDE.md', async () => {
+    const projectRoot = join(tempDir, 'project');
     const apiResponse = {
       content: [{ text: '| #123 | 4:30 PM | 🔵 | Test | ~100 |' }]
     };
@@ -839,18 +848,18 @@ describe('issue #859 - skip folders with active CLAUDE.md', () => {
 
     await updateFolderClaudeMdFiles(
       [
-        '/project/src/a/CLAUDE.md',
-        '/project/src/b/CLAUDE.md',
-        '/project/src/c/file.ts'
+        join(projectRoot, 'src', 'a', 'CLAUDE.md'),
+        join(projectRoot, 'src', 'b', 'CLAUDE.md'),
+        join(projectRoot, 'src', 'c', 'file.ts')
       ],
       'test-project',
       37777,
-      '/project'
+      projectRoot
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const callUrl = (fetchMock.mock.calls[0] as unknown[])[0] as string;
-    expect(callUrl).toContain(encodeURIComponent('/project/src/c'));
+    expect(callUrl).toContain(encodeURIComponent(join(projectRoot, 'src', 'c')));
   });
 
   it('should still exclude project root even when CLAUDE.md filter would allow it', async () => {
@@ -1046,20 +1055,22 @@ describe('CLAUDE.local.md support', () => {
   });
 
   it('should skip folder when CLAUDE.local.md was read in observation', async () => {
+    const projectRoot = join(tempDir, 'project');
     const fetchMock = mock(() => Promise.resolve({ ok: true } as Response));
     global.fetch = fetchMock;
 
     await updateFolderClaudeMdFiles(
-      ['/project/src/utils/CLAUDE.local.md'],
+      [join(projectRoot, 'src', 'utils', 'CLAUDE.local.md')],
       'test-project',
       37777,
-      '/project'
+      projectRoot
     );
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('should skip folder when either CLAUDE.md or CLAUDE.local.md was read', async () => {
+    const projectRoot = join(tempDir, 'project');
     const apiResponse = {
       content: [{ text: '| #123 | 4:30 PM | 🔵 | Test | ~100 |' }]
     };
@@ -1071,20 +1082,20 @@ describe('CLAUDE.local.md support', () => {
 
     await updateFolderClaudeMdFiles(
       [
-        '/project/src/a/CLAUDE.md',          // Skip folder a (regular)
-        '/project/src/b/CLAUDE.local.md',    // Skip folder b (local)
-        '/project/src/c/file.ts'             
+        join(projectRoot, 'src', 'a', 'CLAUDE.md'),
+        join(projectRoot, 'src', 'b', 'CLAUDE.local.md'),
+        join(projectRoot, 'src', 'c', 'file.ts')
       ],
       'test-project',
       37777,
-      '/project'
+      projectRoot
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const callUrl = (fetchMock.mock.calls[0] as unknown[])[0] as string;
-    expect(callUrl).toContain(encodeURIComponent('/project/src/c'));
-    expect(callUrl).not.toContain(encodeURIComponent('/project/src/a'));
-    expect(callUrl).not.toContain(encodeURIComponent('/project/src/b'));
+    expect(callUrl).toContain(encodeURIComponent(join(projectRoot, 'src', 'c')));
+    expect(callUrl).not.toContain(encodeURIComponent(join(projectRoot, 'src', 'a')));
+    expect(callUrl).not.toContain(encodeURIComponent(join(projectRoot, 'src', 'b')));
   });
 });
 

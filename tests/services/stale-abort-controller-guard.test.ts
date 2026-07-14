@@ -66,14 +66,12 @@ describe('Stale AbortController Guard (#1099)', () => {
     });
   });
 
-  describe('AbortSignal.timeout for deleteSession', () => {
-    it('should resolve timeout signal after specified ms', async () => {
+  describe('Timeout fallback for deleteSession', () => {
+    it('should resolve after the specified delay', async () => {
       const start = Date.now();
       const timeoutMs = 50; 
 
-      await new Promise<void>(resolve => {
-        AbortSignal.timeout(timeoutMs).addEventListener('abort', () => resolve(), { once: true });
-      });
+      await new Promise<void>(resolve => setTimeout(resolve, timeoutMs));
 
       const elapsed = Date.now() - start;
       expect(elapsed).toBeGreaterThanOrEqual(timeoutMs - 10);
@@ -83,9 +81,7 @@ describe('Stale AbortController Guard (#1099)', () => {
       const hungGenerator = new Promise<void>(() => {});
       const timeoutMs = 50;
 
-      const timeoutDone = new Promise<string>(resolve => {
-        AbortSignal.timeout(timeoutMs).addEventListener('abort', () => resolve('timeout'), { once: true });
-      });
+      const timeoutDone = new Promise<string>(resolve => setTimeout(() => resolve('timeout'), timeoutMs));
 
       const generatorDone = hungGenerator.then(() => 'generator');
 
@@ -97,11 +93,13 @@ describe('Stale AbortController Guard (#1099)', () => {
       const fastGenerator = Promise.resolve('generator');
       const timeoutMs = 5000;
 
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       const timeoutDone = new Promise<string>(resolve => {
-        AbortSignal.timeout(timeoutMs).addEventListener('abort', () => resolve('timeout'), { once: true });
+        timeout = setTimeout(() => resolve('timeout'), timeoutMs);
       });
 
       const result = await Promise.race([fastGenerator, timeoutDone]);
+      if (timeout) clearTimeout(timeout);
       expect(result).toBe('generator');
     });
   });

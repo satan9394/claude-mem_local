@@ -45,6 +45,9 @@ const EXCLUDED_PATTERNS = [
   /build\/hook-shell-template\.ts$/,  // Pure build-time shell-string generator (no runtime/observability surface); drift is enforced by build-hooks.js + plugin-distribution.test.ts
   /worker\/model-aliases\.ts$/,  // Pure $TIER alias resolver (#2289); side-effect-free passthrough, logging happens at the request-time call site
   /worker\/TimelineService\.ts$/,  // Pure filterByDepth helper after dead-code removal; no side effects (mirrors FallbackErrorHandler)
+  // ponytail: provider requests have a redacted SQLite audit trail; blanket debug logging here would duplicate it and increase secret-leak risk.
+  /worker\/http\/routes\/(?:Privacy|Provider)Routes\.ts$/,
+  /worker\/(?:providers|security)\//,
 ];
 
 const HIGH_PRIORITY_PATTERNS = [
@@ -86,12 +89,12 @@ async function findTypeScriptFiles(dir: string): Promise<string[]> {
 }
 
 function shouldExclude(filePath: string): boolean {
-  const relativePath = relative(SRC_DIR, filePath);
+  const relativePath = relative(SRC_DIR, filePath).replaceAll('\\', '/');
   return EXCLUDED_PATTERNS.some(pattern => pattern.test(relativePath));
 }
 
 function isHighPriority(filePath: string): boolean {
-  const relativePath = relative(SRC_DIR, filePath);
+  const relativePath = relative(SRC_DIR, filePath).replaceAll('\\', '/');
 
   if (isUIFile(relativePath)) {
     return false;
@@ -103,7 +106,7 @@ function isHighPriority(filePath: string): boolean {
 function analyzeFile(filePath: string): FileAnalysis {
   const content = readFileSync(filePath, "utf-8");
   const lines = content.split("\n");
-  const relativePath = relative(PROJECT_ROOT, filePath);
+  const relativePath = relative(PROJECT_ROOT, filePath).replaceAll('\\', '/');
 
   const hasLoggerImport = /import\s+.*logger.*from\s+['"].*logger(\.(js|ts))?['"]/.test(content);
 

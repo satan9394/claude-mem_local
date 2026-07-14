@@ -45,10 +45,8 @@ export function formatDate(dateInput: string | number): string {
 }
 
 export function toRelativePath(filePath: string, cwd: string): string {
-  if (path.isAbsolute(filePath)) {
-    return path.relative(cwd, filePath);
-  }
-  return filePath;
+  const relativePath = path.isAbsolute(filePath) ? path.relative(cwd, filePath) : filePath;
+  return relativePath.replace(/\\/g, '/');
 }
 
 export function extractFirstFile(

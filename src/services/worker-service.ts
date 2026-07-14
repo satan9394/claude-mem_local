@@ -215,10 +215,16 @@ export class WorkerService implements WorkerRef {
     this.ccSwitchAgent = new CcSwitchProvider(this.dbManager, this.sessionManager, {
       discovery,
       getProviderConfig: () => this.loadProviderConfig(),
+      audit: input => {
+        if (this.initializationCompleteFlag) this.dbManager.recordProviderAudit(input);
+      },
     });
     this.directAgent = new DirectOfficialProvider(this.dbManager, this.sessionManager, {
       getProviderConfig: () => this.loadProviderConfig(),
       secretStore: this.secretStore,
+      audit: input => {
+        if (this.initializationCompleteFlag) this.dbManager.recordProviderAudit(input);
+      },
     });
     this.providerRegistry = new ProviderRegistry();
     this.providerRegistry.register({ id: 'claude', label: 'Claude SDK', provider: this.sdkAgent });

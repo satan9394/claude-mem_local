@@ -327,9 +327,7 @@ function resetState(): void {
   } else {
     process.env.CLAUDE_MEM_CHROMA_PREWARM_TIMEOUT_MS = originalPrewarmTimeout;
   }
-  if (realProcessPlatform) {
-    Object.defineProperty(process, 'platform', realProcessPlatform);
-  }
+  Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
 }
 
 async function waitForCondition(predicate: () => boolean): Promise<void> {

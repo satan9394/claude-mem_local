@@ -2,11 +2,12 @@ import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { fileURLToPath } from 'url';
 
 describe('Hook Lifecycle - Event Handlers', () => {
   describe('worker fallback failure counter', () => {
     it('resets stale unreachable state before 429/5xx API fallbacks', () => {
-      const source = readFileSync('src/shared/worker-utils.ts', 'utf-8');
+      const source = readFileSync(fileURLToPath(new URL('../src/shared/worker-utils.ts', import.meta.url)), 'utf-8');
       const nonOkRegion = source.slice(
         source.indexOf('if (!response.ok)'),
         source.indexOf('const text = await response.text();'),
@@ -494,7 +495,7 @@ describe('hookCommand - stderr discipline (plan 01 / #2292)', () => {
     expect(typeof hookCommand).toBe('function');
 
     const hookCommandSource = await Bun.file(
-      new URL('../src/cli/hook-command.ts', import.meta.url).pathname
+      fileURLToPath(new URL('../src/cli/hook-command.ts', import.meta.url))
     ).text();
 
     // Diagnostics still go through the structured logger.

@@ -14,6 +14,7 @@ afterEach(() => {
 describe('CcSwitchProvider', () => {
   it('uses only the Anthropic Messages surface and placeholder authentication', async () => {
     const requests: Array<{ url: URL; headers: Headers; body: Record<string, unknown> }> = [];
+    const audits: Array<Record<string, unknown>> = [];
     const server = Bun.serve({
       port: 0,
       hostname: '127.0.0.1',
@@ -40,6 +41,7 @@ describe('CcSwitchProvider', () => {
     const provider = new CcSwitchProvider({} as never, {} as never, {
       discovery: { discover: async () => ({ url: baseUrl, source: 'explicit', checkedAt: 1 }) },
       getProviderConfig: () => config,
+      audit: input => audits.push(input),
     });
 
     const result = await provider.request([
@@ -62,6 +64,11 @@ describe('CcSwitchProvider', () => {
     expect(JSON.stringify(requests[0].body)).not.toContain('sk-123');
     expect(requests.map(request => request.url.pathname)).not.toContain('/v1/chat/completions');
     expect(requests.map(request => request.url.pathname)).not.toContain('/v1/models');
+    expect(audits[0]).toMatchObject({
+      action: 'provider_request', providerId: 'cc-switch', model: 'upstream-hidden-model',
+      protocol: 'anthropic', outcome: 'success', inputTokens: 11, outputTokens: 7,
+    });
+    expect(audits[0].requestChars).toBeGreaterThan(0);
   });
 
   it('maps main-role and fixed-alias without discovering upstream model ids', async () => {

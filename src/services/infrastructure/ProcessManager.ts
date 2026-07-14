@@ -83,21 +83,22 @@ function resolveWorkerRuntimePathUncached(options: RuntimeResolverOptions): stri
   const homeDirectory = options.homeDirectory ?? homedir();
   const pathExists = options.pathExists ?? existsSync;
   const lookupInPath = options.lookupInPath ?? lookupBinaryInPath;
+  const platformPath = platform === 'win32' ? path.win32 : path.posix;
 
   const candidatePaths: (string | undefined)[] = platform === 'win32'
     ? [
         env.BUN,
         env.BUN_PATH,
-        path.join(homeDirectory, '.bun', 'bin', 'bun.exe'),
-        path.join(homeDirectory, '.bun', 'bin', 'bun'),
-        env.USERPROFILE ? path.join(env.USERPROFILE, '.bun', 'bin', 'bun.exe') : undefined,
-        env.LOCALAPPDATA ? path.join(env.LOCALAPPDATA, 'bun', 'bun.exe') : undefined,
-        env.LOCALAPPDATA ? path.join(env.LOCALAPPDATA, 'bun', 'bin', 'bun.exe') : undefined,
+        platformPath.join(homeDirectory, '.bun', 'bin', 'bun.exe'),
+        platformPath.join(homeDirectory, '.bun', 'bin', 'bun'),
+        env.USERPROFILE ? platformPath.join(env.USERPROFILE, '.bun', 'bin', 'bun.exe') : undefined,
+        env.LOCALAPPDATA ? platformPath.join(env.LOCALAPPDATA, 'bun', 'bun.exe') : undefined,
+        env.LOCALAPPDATA ? platformPath.join(env.LOCALAPPDATA, 'bun', 'bin', 'bun.exe') : undefined,
       ]
     : [
         env.BUN,
         env.BUN_PATH,
-        path.join(homeDirectory, '.bun', 'bin', 'bun'),
+        platformPath.join(homeDirectory, '.bun', 'bin', 'bun'),
         '/usr/local/bin/bun',
         '/opt/homebrew/bin/bun',
         '/home/linuxbrew/.linuxbrew/bin/bun',

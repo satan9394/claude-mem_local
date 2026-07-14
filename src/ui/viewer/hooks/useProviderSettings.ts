@@ -58,6 +58,7 @@ export function useProviderSettings(initialConfig?: ProviderConfig) {
   const [discovery, setDiscovery] = useState<{ url: string; port: number; source: string; version?: string } | null>(null);
   const [importPreview, setImportPreview] = useState<ProviderImportPreview | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [models, setModels] = useState<string[]>([]);
 
   const refresh = useCallback(async () => {
     const [settings, providerStatus, doctorReport] = await Promise.all([
@@ -150,6 +151,29 @@ export function useProviderSettings(initialConfig?: ProviderConfig) {
     });
   }, [refresh]);
 
+  const loadModels = useCallback(async (profileId: string) => {
+    await runAction(setAction, 'Loading the provider model catalog…', async () => {
+      const catalog = await requestJson<{ models: string[]; manualModel?: string; error?: string }>(
+        API_ENDPOINTS.PROVIDER_MODELS(profileId),
+      );
+      setModels(catalog.models);
+      return catalog.error
+        ? `Model catalog unavailable. Enter the model ID manually${catalog.manualModel ? ` (current: ${catalog.manualModel})` : ''}.`
+        : `${catalog.models.length} model${catalog.models.length === 1 ? '' : 's'} loaded.`;
+    });
+  }, []);
+
+  const deleteProfile = useCallback(async (profileId: string) => {
+    await runAction(setAction, 'Deleting the provider profile and stored key…', async () => {
+      await requestJson(`${API_ENDPOINTS.PROVIDER_PROFILES}/${encodeURIComponent(profileId)}`, {
+        method: 'DELETE',
+      });
+      setModels([]);
+      await refresh();
+      return 'Provider profile and stored key deleted. Legacy local mode is active.';
+    });
+  }, [refresh]);
+
   const runDoctor = useCallback(async () => {
     await runAction(setAction, 'Running provider diagnostics…', async () => {
       await refresh();
@@ -194,9 +218,9 @@ export function useProviderSettings(initialConfig?: ProviderConfig) {
   }, [importFile, importPreview, refresh]);
 
   return {
-    config, status, doctor, action, discovery, importPreview,
+    config, status, doctor, action, discovery, importPreview, models,
     refresh, activateLegacy, setupCcSwitch, saveDirectProfile,
-    testConnection, runDoctor, previewImport, confirmImport,
+    testConnection, loadModels, deleteProfile, runDoctor, previewImport, confirmImport,
   };
 }
 

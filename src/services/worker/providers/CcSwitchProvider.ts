@@ -1,6 +1,7 @@
 import type { ActiveSession, ConversationMessage } from '../../worker-types.js';
 import type { DatabaseManager } from '../DatabaseManager.js';
 import type { SessionManager } from '../SessionManager.js';
+import type { ProviderAuditInput } from '../../sqlite/SessionStore.js';
 import { ClassifiedProviderError } from '../provider-errors.js';
 import { parseRetryAfterMs, withRetry } from '../retry.js';
 import { EgressPolicy } from '../security/EgressPolicy.js';
@@ -9,7 +10,7 @@ import { ProjectPrivacyPolicy } from '../security/ProjectPrivacyPolicy.js';
 import { HttpConversationProvider, type ProviderQueryResult } from './HttpConversationProvider.js';
 import type { CcSwitchDiscovery, CcSwitchDiscoveryResult } from './CcSwitchDiscovery.js';
 import type { ProviderConfigV1 } from './types.js';
-import { ProviderConfigError } from './types.js';
+import { ProviderConfigError, providerErrorCodeFromError } from './types.js';
 
 const PROXY_MANAGED = 'PROXY_MANAGED';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -34,6 +35,7 @@ export interface CcSwitchProviderOptions {
   getProviderConfig: () => ProviderConfigV1;
   fetch?: typeof fetch;
   sensitivePaths?: string[];
+  audit?: (input: ProviderAuditInput) => void;
 }
 
 export function classifyCcSwitchError(input: {
@@ -122,6 +124,8 @@ export class CcSwitchProvider extends HttpConversationProvider<CcSwitchConfig> {
       messages: history.map(message => ({ role: message.role, content: message.content })),
     }, { sensitivePaths: this.options.sensitivePaths });
     this.sanitizerReport = sanitized.report;
+    const requestChars = JSON.stringify(sanitized.payload).length;
+    const startedAt = Date.now();
 
     const policy = new EgressPolicy({
       allowedOrigin: config.baseUrl,
@@ -130,7 +134,8 @@ export class CcSwitchProvider extends HttpConversationProvider<CcSwitchConfig> {
       fetch: this.options.fetch,
     });
     const apiUrl = new URL('/v1/messages', `${config.baseUrl}/`).toString();
-    const data = await withRetry<AnthropicResponse>(async signal => {
+    try {
+      const data = await withRetry<AnthropicResponse>(async signal => {
       let response: Response;
       try {
         response = await policy.fetch(apiUrl, {
@@ -161,27 +166,44 @@ export class CcSwitchProvider extends HttpConversationProvider<CcSwitchConfig> {
       } catch (error) {
         throw new ProviderConfigError('CC_SWITCH_PROTOCOL_MISMATCH', 'response was not valid Anthropic JSON');
       }
-    }, { label: `CC Switch ${config.model}` });
+      }, { label: `CC Switch ${config.model}` });
 
-    if (data.error) {
-      throw classifyCcSwitchError({ bodyText: `${data.error.type ?? ''} ${data.error.message ?? ''}`, cause: data.error });
+      if (data.error) {
+        throw classifyCcSwitchError({ bodyText: `${data.error.type ?? ''} ${data.error.message ?? ''}`, cause: data.error });
+      }
+      const content = (data.content ?? [])
+        .filter(block => block.type === 'text' && typeof block.text === 'string')
+        .map(block => block.text)
+        .join('\n');
+      const inputTokens = data.usage?.input_tokens;
+      const outputTokens = data.usage?.output_tokens;
+      const tokensUsed = typeof inputTokens === 'number' && typeof outputTokens === 'number'
+        ? inputTokens + outputTokens
+        : undefined;
+      const result = {
+        content,
+        ...(tokensUsed !== undefined ? { tokensUsed } : {}),
+        ...(inputTokens !== undefined ? { inputTokens } : {}),
+        ...(outputTokens !== undefined ? { outputTokens } : {}),
+        ...(typeof data.model === 'string' && data.model ? { servedModel: data.model } : {}),
+      };
+      this.options.audit?.({
+        action: 'provider_request', providerId: 'cc-switch', mode: 'cc-switch-auto', outcome: 'success',
+        classification: ProjectPrivacyPolicy.classify(config.project, config.privacy),
+        redactionCount: sanitized.report.redactedCount, model: result.servedModel ?? config.model,
+        protocol: 'anthropic', requestChars, latencyMs: Date.now() - startedAt,
+        inputTokens, outputTokens,
+      });
+      return result;
+    } catch (error) {
+      this.options.audit?.({
+        action: 'provider_request', providerId: 'cc-switch', mode: 'cc-switch-auto', outcome: 'error',
+        classification: ProjectPrivacyPolicy.classify(config.project, config.privacy),
+        redactionCount: sanitized.report.redactedCount, model: config.model, protocol: 'anthropic',
+        requestChars, latencyMs: Date.now() - startedAt, errorCode: providerErrorCodeFromError(error),
+      });
+      throw error;
     }
-    const content = (data.content ?? [])
-      .filter(block => block.type === 'text' && typeof block.text === 'string')
-      .map(block => block.text)
-      .join('\n');
-    const inputTokens = data.usage?.input_tokens;
-    const outputTokens = data.usage?.output_tokens;
-    const tokensUsed = typeof inputTokens === 'number' && typeof outputTokens === 'number'
-      ? inputTokens + outputTokens
-      : undefined;
-    return {
-      content,
-      ...(tokensUsed !== undefined ? { tokensUsed } : {}),
-      ...(inputTokens !== undefined ? { inputTokens } : {}),
-      ...(outputTokens !== undefined ? { outputTokens } : {}),
-      ...(typeof data.model === 'string' && data.model ? { servedModel: data.model } : {}),
-    };
   }
 
   private async resolveConfig(project: string): Promise<CcSwitchConfig> {

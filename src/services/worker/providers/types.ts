@@ -37,19 +37,22 @@ export interface ProviderConfigV1 {
   };
 }
 
-export type ProviderErrorCode =
-  | 'PROFILE_INVALID'
-  | 'PLAINTEXT_SECRET_REJECTED'
-  | 'SECRET_UNAVAILABLE'
-  | 'CC_SWITCH_NOT_FOUND'
-  | 'CC_SWITCH_UNHEALTHY'
-  | 'CC_SWITCH_PROTOCOL_MISMATCH'
-  | 'CC_SWITCH_REQUEST_FAILED'
-  | 'DIRECT_PROVIDER_REQUEST_FAILED'
-  | 'PRIVACY_POLICY_BLOCKED'
-  | 'EGRESS_BLOCKED'
-  | 'REDIRECT_BLOCKED'
-  | 'CC_SWITCH_IMPORT_UNSUPPORTED_SCHEMA';
+export const PROVIDER_ERROR_CODES = [
+  'PROFILE_INVALID',
+  'PLAINTEXT_SECRET_REJECTED',
+  'SECRET_UNAVAILABLE',
+  'CC_SWITCH_NOT_FOUND',
+  'CC_SWITCH_UNHEALTHY',
+  'CC_SWITCH_PROTOCOL_MISMATCH',
+  'CC_SWITCH_REQUEST_FAILED',
+  'DIRECT_PROVIDER_REQUEST_FAILED',
+  'PRIVACY_POLICY_BLOCKED',
+  'EGRESS_BLOCKED',
+  'REDIRECT_BLOCKED',
+  'CC_SWITCH_IMPORT_UNSUPPORTED_SCHEMA',
+] as const;
+
+export type ProviderErrorCode = typeof PROVIDER_ERROR_CODES[number];
 
 export class ProviderConfigError extends Error {
   constructor(
@@ -59,4 +62,10 @@ export class ProviderConfigError extends Error {
     super(`${code}: ${message}`);
     this.name = 'ProviderConfigError';
   }
+}
+
+export function providerErrorCodeFromError(error: unknown): ProviderErrorCode | undefined {
+  if (error instanceof ProviderConfigError) return error.code;
+  const candidate = error instanceof Error ? error.message.match(/^([A-Z][A-Z0-9_]+):/)?.[1] : undefined;
+  return PROVIDER_ERROR_CODES.find(code => code === candidate);
 }

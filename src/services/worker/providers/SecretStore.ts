@@ -21,16 +21,18 @@ export interface SecretProtector {
 export type PowerShellRunner = (script: string, stdinBase64: string) => Promise<string>;
 
 const DPAPI_PROTECT_SCRIPT = [
+  'Add-Type -AssemblyName System.Security',
   '$bytes=[Convert]::FromBase64String([Console]::In.ReadToEnd())',
-  '$scope=[Security.Cryptography.DataProtectionScope]::CurrentUser',
-  '$protected=[Security.Cryptography.ProtectedData]::Protect($bytes,$null,$scope)',
+  '$scope=[System.Security.Cryptography.DataProtectionScope]::CurrentUser',
+  '$protected=[System.Security.Cryptography.ProtectedData]::Protect($bytes,$null,$scope)',
   '[Console]::Out.Write([Convert]::ToBase64String($protected))',
 ].join(';');
 
 const DPAPI_UNPROTECT_SCRIPT = [
+  'Add-Type -AssemblyName System.Security',
   '$bytes=[Convert]::FromBase64String([Console]::In.ReadToEnd())',
-  '$scope=[Security.Cryptography.DataProtectionScope]::CurrentUser',
-  '$plain=[Security.Cryptography.ProtectedData]::Unprotect($bytes,$null,$scope)',
+  '$scope=[System.Security.Cryptography.DataProtectionScope]::CurrentUser',
+  '$plain=[System.Security.Cryptography.ProtectedData]::Unprotect($bytes,$null,$scope)',
   '[Console]::Out.Write([Convert]::ToBase64String($plain))',
 ].join(';');
 

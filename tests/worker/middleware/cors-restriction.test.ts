@@ -68,10 +68,12 @@ describe('CORS Restriction', () => {
         res.json({ ok: true });
       });
 
-      testPort = 41000 + Math.floor(Math.random() * 10000);
       await new Promise<void>((resolve) => {
-        server = app.listen(testPort, '127.0.0.1', resolve);
+        server = app.listen(0, '127.0.0.1', resolve);
       });
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Expected an ephemeral TCP port');
+      testPort = address.port;
     });
 
     afterEach(async () => {

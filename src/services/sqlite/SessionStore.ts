@@ -66,7 +66,7 @@ interface SdkSessionDetailRow {
 }
 
 export interface ProviderAuditInput {
-  action: 'provider_resolve' | 'provider_test' | 'provider_activate' | 'profile_create' | 'profile_update' | 'profile_delete' | 'secret_put' | 'secret_delete' | 'import_preview' | 'import_profiles';
+  action: 'provider_resolve' | 'provider_request' | 'provider_test' | 'provider_activate' | 'profile_create' | 'profile_update' | 'profile_delete' | 'secret_put' | 'secret_delete' | 'import_preview' | 'import_profiles';
   providerId?: string;
   profileId?: string;
   mode?: 'local' | 'cc-switch-auto' | 'direct';
@@ -74,6 +74,12 @@ export interface ProviderAuditInput {
   errorCode?: string;
   classification?: 'public' | 'internal' | 'confidential';
   redactionCount?: number;
+  model?: string;
+  protocol?: 'anthropic' | 'openai-compatible';
+  requestChars?: number;
+  latencyMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 export interface ProviderAuditRow {
@@ -88,6 +94,12 @@ export interface ProviderAuditRow {
   error_code: string | null;
   classification: ProviderAuditInput['classification'] | null;
   redaction_count: number;
+  model: string | null;
+  protocol: ProviderAuditInput['protocol'] | null;
+  request_chars: number | null;
+  latency_ms: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
 }
 
 function auditIdentifier(value: string | undefined): string | null {
@@ -96,6 +108,14 @@ function auditIdentifier(value: string | undefined): string | null {
 
 function auditErrorCode(value: string | undefined): string | null {
   return value && /^[A-Z][A-Z0-9_]{0,79}$/.test(value) ? value : null;
+}
+
+function auditModel(value: string | undefined): string | null {
+  return value && /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/.test(value) ? value : null;
+}
+
+function auditMetric(value: number | undefined): number | null {
+  return Number.isFinite(value) ? Math.max(0, Math.min(1_000_000_000, Math.trunc(value!))) : null;
 }
 
 export class SessionStore {
@@ -150,8 +170,9 @@ export class SessionStore {
     const result = this.db.prepare(`
       INSERT INTO provider_audit (
         created_at, created_at_epoch, action, provider_id, profile_id, mode,
-        outcome, error_code, classification, redaction_count
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        outcome, error_code, classification, redaction_count, model, protocol,
+        request_chars, latency_ms, input_tokens, output_tokens
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       now.toISOString(),
       now.getTime(),
@@ -163,6 +184,12 @@ export class SessionStore {
       auditErrorCode(input.errorCode),
       input.classification ?? null,
       Math.max(0, Math.min(1_000_000, Math.trunc(input.redactionCount ?? 0))),
+      auditModel(input.model),
+      input.protocol === 'anthropic' || input.protocol === 'openai-compatible' ? input.protocol : null,
+      auditMetric(input.requestChars),
+      auditMetric(input.latencyMs),
+      auditMetric(input.inputTokens),
+      auditMetric(input.outputTokens),
     );
     return Number(result.lastInsertRowid);
   }
@@ -171,7 +198,8 @@ export class SessionStore {
     const boundedLimit = Math.max(1, Math.min(500, Math.trunc(limit)));
     return this.db.query(`
       SELECT id, created_at, created_at_epoch, action, provider_id, profile_id,
-             mode, outcome, error_code, classification, redaction_count
+             mode, outcome, error_code, classification, redaction_count, model,
+             protocol, request_chars, latency_ms, input_tokens, output_tokens
       FROM provider_audit
       ORDER BY id DESC
       LIMIT ?
@@ -579,9 +607,28 @@ export class SessionStore {
         outcome TEXT NOT NULL,
         error_code TEXT,
         classification TEXT,
-        redaction_count INTEGER NOT NULL DEFAULT 0
+        redaction_count INTEGER NOT NULL DEFAULT 0,
+        model TEXT,
+        protocol TEXT,
+        request_chars INTEGER,
+        latency_ms INTEGER,
+        input_tokens INTEGER,
+        output_tokens INTEGER
       )
     `);
+    const columns = new Set(
+      (this.db.query('PRAGMA table_info(provider_audit)').all() as Array<{ name: string }>).map(column => column.name),
+    );
+    for (const [name, definition] of [
+      ['model', 'TEXT'],
+      ['protocol', 'TEXT'],
+      ['request_chars', 'INTEGER'],
+      ['latency_ms', 'INTEGER'],
+      ['input_tokens', 'INTEGER'],
+      ['output_tokens', 'INTEGER'],
+    ] as const) {
+      if (!columns.has(name)) this.db.run(`ALTER TABLE provider_audit ADD COLUMN ${name} ${definition}`);
+    }
     this.db.run('CREATE INDEX IF NOT EXISTS idx_provider_audit_created_at ON provider_audit(created_at_epoch DESC)');
     this.db.prepare('INSERT OR IGNORE INTO schema_versions (version, applied_at) VALUES (?, ?)').run(41, new Date().toISOString());
   }

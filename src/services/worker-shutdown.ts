@@ -91,7 +91,6 @@ export async function runShutdownSequence(options: ShutdownSequenceOptions): Pro
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<'deadline'>((resolve) => {
     deadlineTimer = setTimeout(() => resolve('deadline'), options.gracefulDeadlineMs);
-    deadlineTimer.unref?.();
   });
   try {
     const outcome = await Promise.race([

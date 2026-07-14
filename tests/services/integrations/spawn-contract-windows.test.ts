@@ -52,7 +52,7 @@ describe('Windows #2695 - codex spawn resolves the .cmd shim without a shell', (
       'win32',
     );
 
-    expect(invocation.command).toBe('cmd.exe');
+    expect(invocation.command).toBe(process.env.ComSpec ?? 'cmd.exe');
     expect(invocation.args).toEqual([
       '/d',
       '/s',
@@ -79,7 +79,7 @@ describe('Windows #2695 - codex spawn resolves the .cmd shim without a shell', (
       () => 'C:\\Program Files\\nodejs\\codex.cmd',
     );
 
-    expect(invocation.command).toBe('cmd.exe');
+    expect(invocation.command).toBe(process.env.ComSpec ?? 'cmd.exe');
     expect(invocation.args).toEqual([
       '/d',
       '/s',
@@ -93,7 +93,7 @@ describe('Windows #2695 - codex spawn resolves the .cmd shim without a shell', (
   it('wraps the codex.cmd fallback with cmd.exe /d /s /c without shell:true', () => {
     const invocation = resolveCodexSpawnInvocation(['--version'], 'win32', () => null);
 
-    expect(invocation.command).toBe('cmd.exe');
+    expect(invocation.command).toBe(process.env.ComSpec ?? 'cmd.exe');
     expect(invocation.args).toEqual(['/d', '/s', '/c', '"codex.cmd" "--version"']);
     expect('shell' in invocation.options).toBe(false);
   });

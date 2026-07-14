@@ -103,7 +103,11 @@ describe('cursor-extraction: extractLastMessage Cursor JSONL compatibility', () 
 describe('cursor-extraction: cursorAdapter transcriptPath derivation', () => {
   const sessionId = `c0ffee${Date.now()}`;
   const fakeCwd = join(tmpdir(), 'fake.workspace', 'subdir');
-  const slug = fakeCwd.replace(/^\//, '').replace(/[/.]/g, '-');
+  const slug = fakeCwd
+    .replace(/\\/g, '/')
+    .replace(/^\//, '')
+    .replace(/:/g, '')
+    .replace(/[/.]/g, '-');
   const transcriptDir = join(homedir(), '.cursor', 'projects', slug, 'agent-transcripts', sessionId);
   const transcriptPath = join(transcriptDir, `${sessionId}.jsonl`);
 

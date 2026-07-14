@@ -1,13 +1,14 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { homedir } from 'os';
+import path from 'path';
 import { getProjectName, getProjectContext } from '../../src/utils/project-name.js';
 
 describe('getProjectName', () => {
   describe('tilde expansion', () => {
     it('resolves bare ~ to home directory basename', () => {
       const home = homedir();
-      const expected = home.split('/').pop() || home.split('\\').pop() || '';
+      const expected = path.basename(home);
       expect(getProjectName('~')).toBe(expected);
     });
 
@@ -17,7 +18,7 @@ describe('getProjectName', () => {
 
     it('resolves ~/ to home directory basename', () => {
       const home = homedir();
-      const expected = home.split('/').pop() || home.split('\\').pop() || '';
+      const expected = path.basename(home);
       expect(getProjectName('~/')).toBe(expected);
     });
   });

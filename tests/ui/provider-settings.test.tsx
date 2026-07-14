@@ -62,6 +62,25 @@ describe('ProviderSettings', () => {
     expect(validateDirectProfile({ ...draft, baseUrl: 'https://user:pass@example.com' }, true)).toContain('credential-free');
   });
 
+  it('exposes model lookup and explicit profile deletion for saved direct profiles', () => {
+    const directConfig: ProviderConfig = {
+      ...config,
+      providerMode: 'direct',
+      activeProviderProfileId: 'official',
+      providerProfiles: [{
+        id: 'official', name: 'Official', protocol: 'anthropic',
+        baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-4-6',
+        secretRef: 'secret:official', enabled: true,
+      }],
+      privacy: { ...config.privacy, localOnly: false },
+    };
+    const html = renderToStaticMarkup(<ProviderSettings initialConfig={directConfig} />);
+
+    expect(html).toContain('Load models');
+    expect(html).toContain('Delete profile');
+    expect(html).toContain('list="direct-provider-models"');
+  });
+
   it('keeps provider settings inside the existing focusable settings dialog', () => {
     const html = renderToStaticMarkup(
       <ContextSettingsModal

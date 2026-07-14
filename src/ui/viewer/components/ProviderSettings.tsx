@@ -122,7 +122,15 @@ export function ProviderSettings({ initialConfig }: ProviderSettingsProps) {
             </label>
             <label>
               Model ID
-              <input value={draft.model} onChange={event => updateDraft('model', event.target.value)} autoComplete="off" />
+              <input
+                value={draft.model}
+                onChange={event => updateDraft('model', event.target.value)}
+                autoComplete="off"
+                list="direct-provider-models"
+              />
+              <datalist id="direct-provider-models">
+                {provider.models.map(model => <option key={model} value={model} />)}
+              </datalist>
             </label>
             <label>
               API key {activeProfile?.secretRef && <span className="provider-saved-hint">Stored · leave blank to keep</span>}
@@ -139,9 +147,35 @@ export function ProviderSettings({ initialConfig }: ProviderSettingsProps) {
               Allow sanitized summaries to leave loopback for this explicit endpoint
             </label>
           </div>
-          <button type="button" className="provider-primary-btn" onClick={handleDirectSave}>
-            Save securely and activate
-          </button>
+          <div className="provider-card-actions">
+            <button type="button" className="provider-primary-btn" onClick={handleDirectSave}>
+              Save securely and activate
+            </button>
+            {activeProfile && (
+              <>
+                <button
+                  type="button"
+                  className="provider-secondary-btn"
+                  onClick={() => void provider.loadModels(activeProfile.id)}
+                  disabled={provider.action.kind === 'loading'}
+                >
+                  Load models
+                </button>
+                <button
+                  type="button"
+                  className="provider-secondary-btn provider-danger-btn"
+                  onClick={() => {
+                    if (window.confirm(`Delete ${activeProfile.name} and its stored API key?`)) {
+                      void provider.deleteProfile(activeProfile.id);
+                    }
+                  }}
+                  disabled={provider.action.kind === 'loading'}
+                >
+                  Delete profile
+                </button>
+              </>
+            )}
+          </div>
         </article>
 
         <article className="provider-mode-card provider-mode-legacy" aria-current={provider.config.providerMode === 'local'}>

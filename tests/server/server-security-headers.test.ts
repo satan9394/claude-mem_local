@@ -20,6 +20,13 @@ function baseOptions(overrides: Partial<ServerOptions> = {}): ServerOptions {
   };
 }
 
+async function listenOnEphemeralPort(server: Server): Promise<number> {
+  await server.listen(0, '127.0.0.1');
+  const address = server.getHttpServer()?.address();
+  if (!address || typeof address === 'string') throw new Error('Expected an ephemeral TCP port');
+  return address.port;
+}
+
 describe('Server security headers (#2572)', () => {
   let server: Server | null = null;
   let spies: ReturnType<typeof spyOn>[] = [];
@@ -36,8 +43,7 @@ describe('Server security headers (#2572)', () => {
   it('emits hardening headers on a server response when securityHeaders=true', async () => {
     spies = [spyOn(logger, 'info').mockImplementation(() => {})];
     server = new Server(baseOptions({ securityHeaders: true }));
-    const port = 41000 + Math.floor(Math.random() * 9000);
-    await server.listen(port, '127.0.0.1');
+    const port = await listenOnEphemeralPort(server);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/health`);
     expect(res.status).toBe(200);
@@ -51,8 +57,7 @@ describe('Server security headers (#2572)', () => {
   it('does NOT emit the hardening headers by default (worker runtime)', async () => {
     spies = [spyOn(logger, 'info').mockImplementation(() => {})];
     server = new Server(baseOptions());
-    const port = 41000 + Math.floor(Math.random() * 9000);
-    await server.listen(port, '127.0.0.1');
+    const port = await listenOnEphemeralPort(server);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/health`);
     expect(res.status).toBe(200);

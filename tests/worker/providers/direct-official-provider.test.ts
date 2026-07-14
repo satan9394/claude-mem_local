@@ -23,6 +23,7 @@ function profile(baseUrl: string, protocol: ProviderProfile['protocol']): Provid
 describe('DirectOfficialProvider', () => {
   it('sends the official Anthropic Messages shape with SecretStore credentials', async () => {
     const captured: Array<{ path: string; headers: Headers; body: Record<string, unknown> }> = [];
+    const audits: Array<Record<string, unknown>> = [];
     const server = Bun.serve({
       port: 0,
       hostname: '127.0.0.1',
@@ -45,6 +46,7 @@ describe('DirectOfficialProvider', () => {
     const provider = new DirectOfficialProvider({} as never, {} as never, {
       getProviderConfig: () => config,
       secretStore: { get: async ref => ref === 'secret:test' ? 'anthropic-secret' : '' },
+      audit: input => audits.push(input),
     });
 
     const result = await provider.request([{ role: 'user', content: 'hello' }], 'C:\\work');
@@ -54,6 +56,12 @@ describe('DirectOfficialProvider', () => {
     expect(captured[0].headers.get('x-api-key')).toBe('anthropic-secret');
     expect(captured[0].headers.get('anthropic-version')).toBe('2023-06-01');
     expect(captured[0].body).toMatchObject({ model: 'test-model', max_tokens: 4096 });
+    expect(audits[0]).toMatchObject({
+      action: 'provider_request', providerId: 'direct', profileId: active.id,
+      model: 'served-anthropic', protocol: 'anthropic', outcome: 'success',
+      inputTokens: 5, outputTokens: 3,
+    });
+    expect(audits[0].requestChars).toBeGreaterThan(0);
   });
 
   it('sends an OpenAI-compatible chat completion without provider-specific tracking headers', async () => {

@@ -1,13 +1,17 @@
 import { describe, it, expect } from 'bun:test';
-import { readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
+import { readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'fs';
 import { tmpdir } from 'os';
-import { spawnSync } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { buildCodexWindowsCommand, buildShellCommand } from '../../src/build/hook-shell-template.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
+const hostIsWindows = path.sep === '\\';
+const hostPath = process.env.PATH ?? '';
+const shellExecutable = hostIsWindows
+  ? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'bash.exe')
+  : 'bash';
 
 function readJson(relativePath: string): any {
   return JSON.parse(readFileSync(path.join(projectRoot, relativePath), 'utf-8'));
@@ -238,18 +242,22 @@ describe('Plugin Distribution - package.json Files Field', () => {
   });
 
   it('npm tarball includes sqlite runtime modules required by the worker', () => {
-    const result = spawnSync('npm', ['pack', '--dry-run', '--json'], {
+    const result = Bun.spawnSync({
+      cmd: hostIsWindows
+        ? [process.env.ComSpec ?? 'C:\\Windows\\System32\\cmd.exe', '/d', '/s', '/c', 'npm pack --dry-run --json']
+        : ['npm', 'pack', '--dry-run', '--json'],
       cwd: projectRoot,
-      encoding: 'utf-8',
+      stdout: 'pipe',
+      stderr: 'pipe',
     });
 
-    expect(result.status).toBe(0);
-    const packed = JSON.parse(result.stdout);
+    expect(result.exitCode).toBe(0);
+    const packed = JSON.parse(new TextDecoder().decode(result.stdout));
     const filePaths = new Set(packed[0].files.map((file: { path: string }) => file.path));
 
     expect(filePaths.has('plugin/sqlite/SessionStore.js')).toBe(true);
     expect(filePaths.has('plugin/sqlite/observations/files.js')).toBe(true);
-  });
+  }, 15_000);
 });
 
 describe('Plugin Distribution - Build Script Verification', () => {
@@ -446,11 +454,35 @@ describe('Spawn-Contract Templating - Rule A shell resolution matrix', () => {
   }
 
   function shellEval(command: string, env: Record<string, string>): { status: number | null; stdout: string; stderr: string } {
-    const result = spawnSync('bash', ['-c', command], {
-      env: { PATH: process.env.PATH ?? '', ...env },
-      encoding: 'utf-8',
+    const wslEnv = hostIsWindows ? Object.keys(env).join(':') : process.env.WSLENV;
+    // ponytail: Windows' legacy bash launcher rewrites `$VAR` in argv; stdin preserves the shell program verbatim.
+    const result = Bun.spawnSync({
+      cmd: [shellExecutable, ...(hostIsWindows ? ['-s'] : ['-c', command])],
+      env: { PATH: hostPath, WSLENV: wslEnv ?? '', ...env },
+      stdin: hostIsWindows ? Buffer.from(command) : undefined,
+      stdout: 'pipe',
+      stderr: 'pipe',
     });
-    return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+    return {
+      status: result.exitCode,
+      stdout: new TextDecoder().decode(result.stdout),
+      stderr: new TextDecoder().decode(result.stderr),
+    };
+  }
+
+  function shellPath(value: string): string {
+    if (!hostIsWindows) return value;
+    const absolute = realpathSync.native(path.resolve(value));
+    const match = /^([A-Za-z]):[\\/](.*)$/.exec(absolute);
+    if (!match) return absolute.replaceAll('\\', '/');
+    const shell = Bun.spawnSync({
+      cmd: [shellExecutable, '-c', 'pwd'],
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const shellCwd = new TextDecoder().decode(shell.stdout).trim();
+    const prefix = shellCwd.startsWith('/mnt/') ? `/mnt/${match[1].toLowerCase()}` : `/${match[1].toLowerCase()}`;
+    return `${prefix}/${match[2].replaceAll('\\', '/')}`;
   }
 
   const claudeCommands = () => {
@@ -460,24 +492,33 @@ describe('Spawn-Contract Templating - Rule A shell resolution matrix', () => {
     );
   };
 
+  function expectClaudeCommandsResolve(expectedRoot: string, env: Record<string, string>): void {
+    const commands = claudeCommands();
+    const result = shellEval(commands.map(({ command }) => `( ${instrument(command)} )`).join('\n'), env);
+    const resolved = result.stdout.split(/\r?\n/).filter(line => line.startsWith('RESOLVED='));
+    expect(result.status).toBe(0);
+    expect(resolved).toEqual(commands.map(() => `RESOLVED=${expectedRoot}`));
+  }
+
   it('resolves _P from CLAUDE_PLUGIN_ROOT when the env var points at a valid root', () => {
     const root = mkdtempSync(path.join(tmpdir(), 'cm-root-'));
+    const home = mkdtempSync(path.join(tmpdir(), 'cm-home-'));
+    const shellRoot = shellPath(root);
+    const shellHome = shellPath(home);
     mkdirSync(path.join(root, 'scripts'), { recursive: true });
     writeFileSync(path.join(root, 'scripts', 'version-check.js'), '');
     writeFileSync(path.join(root, 'scripts', 'bun-runner.js'), '');
     writeFileSync(path.join(root, 'scripts', 'worker-service.cjs'), '');
     try {
-      for (const { command } of claudeCommands()) {
-        const { stdout } = shellEval(instrument(command), {
-          CLAUDE_PLUGIN_ROOT: root,
-          HOME: mkdtempSync(path.join(tmpdir(), 'cm-home-')),
-        });
-        expect(stdout).toContain(`RESOLVED=${root}`);
-      }
+      expectClaudeCommandsResolve(shellRoot, {
+        CLAUDE_PLUGIN_ROOT: shellRoot,
+        HOME: shellHome,
+      });
     } finally {
       rmSync(root, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 
   it('resolves _P from the cache directory when CLAUDE_PLUGIN_ROOT is unset', () => {
     const home = mkdtempSync(path.join(tmpdir(), 'cm-home-'));
@@ -486,26 +527,25 @@ describe('Spawn-Contract Templating - Rule A shell resolution matrix', () => {
     writeFileSync(path.join(cacheRoot, 'scripts', 'version-check.js'), '');
     writeFileSync(path.join(cacheRoot, 'scripts', 'bun-runner.js'), '');
     writeFileSync(path.join(cacheRoot, 'scripts', 'worker-service.cjs'), '');
+    const shellConfigDir = shellPath(path.join(home, '.claude'));
+    const shellCacheRoot = shellPath(cacheRoot);
     try {
-      for (const { command } of claudeCommands()) {
-        const { stdout } = shellEval(instrument(command), { HOME: home });
-        // ls -dt yields a trailing slash; the hook trims it via _R="${_R%/}".
-        expect(stdout).toContain(`RESOLVED=${cacheRoot}`);
-      }
+      // ls -dt yields a trailing slash; the hook trims it via _R="${_R%/}".
+      expectClaudeCommandsResolve(shellCacheRoot, { CLAUDE_CONFIG_DIR: shellConfigDir });
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 
   it('fails cleanly with the canonical not-found message when no candidate exists', () => {
     const home = mkdtempSync(path.join(tmpdir(), 'cm-empty-'));
+    const configDir = path.join(home, '.claude');
+    mkdirSync(configDir, { recursive: true });
+    const shellConfigDir = shellPath(configDir);
     try {
       const parsed = readJson('plugin/hooks/hooks.json');
       const command = hookCommandByPath(parsed, 'UserPromptSubmit.0.0')!;
-      const result = spawnSync('bash', ['-c', command], {
-        env: { PATH: process.env.PATH ?? '', HOME: home },
-        encoding: 'utf-8',
-      });
+      const result = shellEval(command, { CLAUDE_CONFIG_DIR: shellConfigDir });
       expect(result.status).not.toBe(0);
       expect(result.stderr ?? '').toMatch(/claude-mem: .* not found/);
     } finally {
