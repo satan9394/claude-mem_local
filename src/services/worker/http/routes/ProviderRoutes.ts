@@ -56,6 +56,7 @@ interface ProviderRoutesOptions {
     record(input: ProviderAuditInput): void;
     list(limit?: number): ProviderAuditRow[];
   };
+  doctor?: () => Promise<unknown>;
 }
 
 export class ProviderRoutes extends BaseRouteHandler {
@@ -65,6 +66,7 @@ export class ProviderRoutes extends BaseRouteHandler {
 
   setupRoutes(app: express.Application): void {
     app.get('/api/providers/status', this.handleStatus.bind(this));
+    app.get('/api/providers/doctor', this.handleDoctor.bind(this));
     app.post('/api/providers/discover', validateBody(z.object({}).strict()), this.handleDiscover.bind(this));
     app.post('/api/providers/test', validateBody(projectSchema), this.handleTest.bind(this));
     app.get('/api/providers/profiles', this.handleListProfiles.bind(this));
@@ -84,6 +86,10 @@ export class ProviderRoutes extends BaseRouteHandler {
   private handleStatus = this.wrapHandler(async (req: Request, res: Response): Promise<void> => {
     const project = ProviderRoutes.firstString(req.query.project) ?? 'unknown';
     res.json(await this.options.healthService.status(project));
+  });
+
+  private handleDoctor = this.wrapHandler(async (_req: Request, res: Response): Promise<void> => {
+    res.json(this.options.doctor ? await this.options.doctor() : { checks: [] });
   });
 
   private handleDiscover = this.wrapHandler(async (_req: Request, res: Response): Promise<void> => {

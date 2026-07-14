@@ -49,6 +49,7 @@ describe('ProviderRoutes', () => {
         record: input => { audits.push(input); },
         list: () => [],
       },
+      doctor: async () => ({ checks: [{ id: 'worker', label: 'Worker', status: 'pass', detail: 'Ready' }] }),
     });
     const app = express();
     app.use(express.json({ limit: '1mb' }));
@@ -75,12 +76,14 @@ describe('ProviderRoutes', () => {
     const discovery = await postJson(`${baseUrl}/api/providers/discover`, {});
     const test = await postJson(`${baseUrl}/api/providers/test`, { project: 'E:\\work' });
     const models = await getJson(`${baseUrl}/api/providers/main/models`);
-    const serialized = JSON.stringify({ status, discovery, test, models });
+    const doctor = await getJson(`${baseUrl}/api/providers/doctor`);
+    const serialized = JSON.stringify({ status, discovery, test, models, doctor });
 
     expect(status.response.status).toBe(200);
     expect(discovery.body).toMatchObject({ status: 'healthy', port: 15721, source: 'default' });
     expect(test.body).toMatchObject({ status: 'healthy', providerId: 'direct' });
     expect(models.body).toEqual({ models: ['claude-sonnet-4-6'], cached: false });
+    expect(doctor.body.checks[0]).toMatchObject({ id: 'worker', status: 'pass' });
     expect(serialized).not.toMatch(/api.?key|authorization|sk-/i);
   });
 

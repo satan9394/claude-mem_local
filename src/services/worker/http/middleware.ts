@@ -7,7 +7,7 @@ import { logger } from '../../../utils/logger.js';
 export function createMiddleware(): RequestHandler[] {
   const middlewares: RequestHandler[] = [];
 
-  middlewares.push(express.json({ limit: '5mb' }));
+  middlewares.push(express.json({ limit: '20mb' }));
 
   middlewares.push((req: Request, res: Response, next: NextFunction) => {
     const staticExtensions = ['.html', '.js', '.css', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.woff', '.woff2', '.ttf', '.eot'];

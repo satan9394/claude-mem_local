@@ -72,10 +72,8 @@ export interface Settings {
   CLAUDE_MEM_WORKER_HOST: string;
 
   CLAUDE_MEM_PROVIDER?: string;  
-  CLAUDE_MEM_GEMINI_API_KEY?: string;
   CLAUDE_MEM_GEMINI_MODEL?: string;  
   CLAUDE_MEM_GEMINI_RATE_LIMITING_ENABLED?: string;  
-  CLAUDE_MEM_OPENROUTER_API_KEY?: string;
   CLAUDE_MEM_OPENROUTER_MODEL?: string;
   CLAUDE_MEM_OPENROUTER_SITE_URL?: string;
   CLAUDE_MEM_OPENROUTER_APP_NAME?: string;
@@ -91,4 +89,76 @@ export interface Settings {
 
   CLAUDE_MEM_CONTEXT_SHOW_LAST_SUMMARY?: string;
   CLAUDE_MEM_CONTEXT_SHOW_LAST_MESSAGE?: string;
+
+  providerConfig?: ProviderConfig;
+  secretStatus?: Record<string, boolean>;
+}
+
+export type ProviderMode = 'local' | 'cc-switch-auto' | 'direct';
+export type ProviderProtocol = 'anthropic' | 'openai-compatible';
+export type ProjectClassification = 'public' | 'internal' | 'confidential';
+
+export interface ProviderProfile {
+  id: string;
+  name: string;
+  protocol: ProviderProtocol;
+  baseUrl: string;
+  model: string;
+  modelPath?: string;
+  secretRef?: string;
+  preset?: string;
+  enabled: boolean;
+}
+
+export interface ProviderConfig {
+  providerConfigVersion: 1;
+  providerMode: ProviderMode;
+  activeProviderProfileId: string | null;
+  legacyProvider: 'claude' | 'gemini' | 'openrouter';
+  ccSwitch: {
+    explicitUrl: string;
+    modelPolicy: 'summary-role' | 'main-role' | 'fixed-alias';
+    fixedModel: string;
+    advancedPortDiscovery: boolean;
+    candidatePorts: number[];
+  };
+  providerProfiles: ProviderProfile[];
+  privacy: {
+    localOnly: boolean;
+    defaultClassification: ProjectClassification;
+    projects: Record<string, ProjectClassification>;
+  };
+}
+
+export interface ProviderStatus {
+  status: 'healthy' | 'blocked' | 'unavailable';
+  mode: ProviderMode;
+  providerId?: string;
+  profileId?: string;
+  code?: string;
+  ccSwitch?: { source: string; version?: string; port: number };
+}
+
+export interface ProviderImportPreview {
+  schemaVersion: 13;
+  sourceKind: 'sql-export' | 'sqlite';
+  profiles: Array<{
+    sourceId: string;
+    name: string;
+    protocol: ProviderProtocol;
+    baseUrl: string;
+    model: string;
+    secretAvailable: boolean;
+  }>;
+}
+
+export interface DoctorCheck {
+  id: 'worker' | 'cc-switch' | 'protocol' | 'cloud-sync' | 'telemetry' | 'secret-store' | 'sqlite' | 'chroma' | 'egress';
+  label: string;
+  status: 'pass' | 'warn' | 'fail';
+  detail: string;
+}
+
+export interface DoctorReport {
+  checks: DoctorCheck[];
 }

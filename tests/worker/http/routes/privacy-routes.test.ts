@@ -70,6 +70,21 @@ describe('PrivacyRoutes', () => {
     expect(response.status).toBe(204);
     expect(config.privacy.projects).toEqual({});
   });
+
+  it('changes remote egress only through an explicit strict privacy update', async () => {
+    const update = await postJson(`${baseUrl}/api/privacy/settings`, {
+      localOnly: true,
+      defaultClassification: 'confidential',
+    });
+
+    expect(update.body).toEqual({
+      success: true, localOnly: true, defaultClassification: 'confidential',
+    });
+    expect(config.privacy).toMatchObject({ localOnly: true, defaultClassification: 'confidential' });
+    expect((await postJson(`${baseUrl}/api/privacy/settings`, {
+      localOnly: false, defaultClassification: 'internal', extra: true,
+    })).response.status).toBe(400);
+  });
 });
 
 async function postJson(url: string, body: unknown): Promise<{ response: Response; body: any }> {

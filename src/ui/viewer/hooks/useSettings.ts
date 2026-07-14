@@ -26,10 +26,16 @@ export function useSettings() {
   }, []);
 
   const submitSettings = async (newSettings: Settings) => {
+    const {
+      providerConfig: _providerConfig,
+      secretStatus: _secretStatus,
+      CLAUDE_MEM_PROVIDER: _legacyProvider,
+      ...contextSettings
+    } = newSettings;
     const response = await fetch(API_ENDPOINTS.SETTINGS, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newSettings)
+      body: JSON.stringify(contextSettings)
     });
 
     if (!response.ok) {

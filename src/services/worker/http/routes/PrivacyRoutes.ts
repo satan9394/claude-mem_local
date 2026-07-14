@@ -13,6 +13,10 @@ const classificationSchema = z.object({
   classification: z.enum(['public', 'internal', 'confidential']),
 }).strict();
 const deleteClassificationSchema = z.object({ project: z.string().trim().min(1).max(1024) }).strict();
+const privacySettingsSchema = z.object({
+  localOnly: z.boolean(),
+  defaultClassification: z.enum(['public', 'internal', 'confidential']),
+}).strict();
 
 interface PrivacyRoutesOptions {
   getConfig: () => ProviderConfigV1;
@@ -27,6 +31,7 @@ export class PrivacyRoutes extends BaseRouteHandler {
 
   setupRoutes(app: express.Application): void {
     app.get('/api/privacy/diagnostics', this.handleDiagnostics.bind(this));
+    app.post('/api/privacy/settings', validateBody(privacySettingsSchema), this.handlePrivacySettings.bind(this));
     app.post('/api/privacy/classification', validateBody(classificationSchema), this.handleSetClassification.bind(this));
     app.delete('/api/privacy/classification', validateBody(deleteClassificationSchema), this.handleDeleteClassification.bind(this));
   }
@@ -68,6 +73,18 @@ export class PrivacyRoutes extends BaseRouteHandler {
       success: true,
       classification: req.body.classification,
       projectRuleCount: Object.keys(current.privacy.projects).length,
+    });
+  });
+
+  private handlePrivacySettings = this.wrapHandler((req: Request, res: Response): void => {
+    const current = structuredClone(this.options.getConfig());
+    current.privacy.localOnly = req.body.localOnly;
+    current.privacy.defaultClassification = req.body.defaultClassification;
+    this.options.saveConfig(parseProviderConfig(current));
+    res.json({
+      success: true,
+      localOnly: current.privacy.localOnly,
+      defaultClassification: current.privacy.defaultClassification,
     });
   });
 

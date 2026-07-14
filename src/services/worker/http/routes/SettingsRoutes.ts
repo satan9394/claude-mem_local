@@ -199,7 +199,7 @@ export class SettingsRoutes extends BaseRouteHandler {
     if (settings.CLAUDE_MEM_WORKER_HOST) {
       const host = settings.CLAUDE_MEM_WORKER_HOST;
       if (!isLoopbackWorkerHost(host)) {
-        return { valid: false, error: 'CLAUDE_MEM_WORKER_HOST must be loopback (127.0.0.1, localhost, or ::1)' };
+        return { valid: false, error: 'CLAUDE_MEM_WORKER_HOST must be loopback (127.0.0.0/8, localhost, or ::1)' };
       }
     }
 

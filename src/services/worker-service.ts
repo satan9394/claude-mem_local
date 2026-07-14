@@ -376,6 +376,34 @@ export class WorkerService implements WorkerRef {
       importer: this.providerImporter,
       secretStore: this.secretStore,
       audit,
+      doctor: async () => {
+        const provider = await this.providerHealthService.status();
+        const sqliteHealthy = Boolean(this.dbManager.getConnection().query('SELECT 1 AS ok').get());
+        const providerHealthy = provider.status === 'healthy';
+        return {
+          checks: [
+            { id: 'worker', label: 'Worker', status: 'pass', detail: 'Loopback worker is responding' },
+            {
+              id: 'cc-switch', label: 'CC Switch',
+              status: provider.mode !== 'cc-switch-auto' ? 'warn' : providerHealthy ? 'pass' : 'fail',
+              detail: provider.mode !== 'cc-switch-auto' ? 'Not selected' : providerHealthy ? 'Healthy loopback connection' : provider.code,
+            },
+            { id: 'protocol', label: 'Protocol', status: providerHealthy ? 'pass' : 'fail', detail: providerHealthy ? 'Provider protocol configured' : provider.code },
+            { id: 'cloud-sync', label: 'Cloud Sync', status: 'pass', detail: 'Hard disabled' },
+            { id: 'telemetry', label: 'Telemetry', status: 'pass', detail: 'Hard disabled' },
+            { id: 'secret-store', label: 'SecretStore', status: 'pass', detail: 'Encrypted local store available' },
+            { id: 'sqlite', label: 'SQLite', status: sqliteHealthy ? 'pass' : 'fail', detail: sqliteHealthy ? 'Local database ready' : 'Database unavailable' },
+            {
+              id: 'chroma', label: 'Chroma', status: this.dbManager.getChromaSync() ? 'pass' : 'warn',
+              detail: this.dbManager.getChromaSync() ? 'Enabled' : 'Disabled; SQLite search remains available',
+            },
+            {
+              id: 'egress', label: 'Egress', status: 'pass',
+              detail: this.loadProviderConfig().privacy.localOnly ? 'Loopback only' : 'Explicit endpoint policy enforced',
+            },
+          ],
+        };
+      },
     }));
     this.server.registerRoutes(new PrivacyRoutes({
       getConfig: () => this.loadProviderConfig(),

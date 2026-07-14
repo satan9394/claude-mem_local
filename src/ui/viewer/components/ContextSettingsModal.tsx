@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { Settings } from '../types';
 import { TerminalPreview } from './TerminalPreview';
 import { useContextPreview } from '../hooks/useContextPreview';
 import { DEFAULT_SETTINGS } from '../constants/settings';
+import { ProviderSettings } from './ProviderSettings';
 
 interface ContextSettingsModalProps {
   isOpen: boolean;
@@ -32,6 +33,7 @@ function CollapsibleSection({
         className="section-header-btn"
         onClick={() => setIsOpen(!isOpen)}
         type="button"
+        aria-expanded={isOpen}
       >
         <div className="section-header-content">
           <span className="section-title">{title}</span>
@@ -127,6 +129,7 @@ export function ContextSettingsModal({
   saveStatus
 }: ContextSettingsModalProps) {
   const [formState, setFormState] = useState<Settings>(settings);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setFormState(settings);
@@ -153,6 +156,23 @@ export function ContextSettingsModal({
     onSave(formState);
   }, [formState, onSave]);
 
+  const handleModalKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab' || !modalRef.current) return;
+    const focusable = Array.from(modalRef.current.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+    ));
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }, []);
+
   const toggleBoolean = useCallback((key: keyof Settings) => {
     const currentValue = formState[key];
     const newValue = currentValue === 'true' ? 'false' : 'true';
@@ -169,14 +189,27 @@ export function ContextSettingsModal({
     }
   }, [isOpen, onClose]);
 
+  useEffect(() => {
+    if (isOpen) modalRef.current?.focus();
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="context-settings-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={modalRef}
+        className="context-settings-modal"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleModalKeyDown}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-modal-title"
+        tabIndex={-1}
+      >
         {/* Header */}
         <div className="modal-header">
-          <h2>Settings</h2>
+          <h2 id="settings-modal-title">Settings</h2>
           <div className="header-controls">
             <label className="preview-selector">
               Source:
@@ -206,6 +239,8 @@ export function ContextSettingsModal({
               onClick={onClose}
               className="modal-close-btn"
               title="Close (Esc)"
+              aria-label="Close settings"
+              type="button"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -232,6 +267,13 @@ export function ContextSettingsModal({
 
           {/* Right column - Settings Panel */}
           <div className="settings-column">
+            <CollapsibleSection
+              title="Provider routing"
+              description="Local CC Switch or explicit official API"
+            >
+              <ProviderSettings initialConfig={settings.providerConfig} />
+            </CollapsibleSection>
+
             {/* Section 1: Loading */}
             <CollapsibleSection
               title="Loading"
@@ -327,125 +369,22 @@ export function ContextSettingsModal({
             {/* Section 4: Advanced */}
             <CollapsibleSection
               title="Advanced"
-              description="AI provider and model selection"
+              description="Legacy model and worker options"
               defaultOpen={false}
             >
               <FormField
-                label="AI Provider"
-                tooltip="Choose between Claude (via Agent SDK) or Gemini (via REST API)"
+                label="Legacy Claude model"
+                tooltip="Model used only by the legacy Claude SDK route"
               >
                 <select
-                  value={formState.CLAUDE_MEM_PROVIDER || 'claude'}
-                  onChange={(e) => updateSetting('CLAUDE_MEM_PROVIDER', e.target.value)}
+                  value={formState.CLAUDE_MEM_MODEL || 'haiku'}
+                  onChange={(e) => updateSetting('CLAUDE_MEM_MODEL', e.target.value)}
                 >
-                  <option value="claude">Claude (uses your Claude account)</option>
-                  <option value="gemini">Gemini (uses API key)</option>
-                  <option value="openrouter">OpenRouter (multi-model)</option>
+                  <option value="haiku">haiku (fastest)</option>
+                  <option value="sonnet">sonnet (balanced)</option>
+                  <option value="opus">opus (highest quality)</option>
                 </select>
               </FormField>
-
-              {formState.CLAUDE_MEM_PROVIDER === 'claude' && (
-                <FormField
-                  label="Claude Model"
-                  tooltip="Claude model used for generating observations"
-                >
-                  <select
-                    value={formState.CLAUDE_MEM_MODEL || 'haiku'}
-                    onChange={(e) => updateSetting('CLAUDE_MEM_MODEL', e.target.value)}
-                  >
-                    <option value="haiku">haiku (fastest)</option>
-                    <option value="sonnet">sonnet (balanced)</option>
-                    <option value="opus">opus (highest quality)</option>
-                  </select>
-                </FormField>
-              )}
-
-              {formState.CLAUDE_MEM_PROVIDER === 'gemini' && (
-                <>
-                  <FormField
-                    label="Gemini API Key"
-                    tooltip="Your Google AI Studio API key (or set GEMINI_API_KEY env var)"
-                  >
-                    <input
-                      type="password"
-                      value={formState.CLAUDE_MEM_GEMINI_API_KEY || ''}
-                      onChange={(e) => updateSetting('CLAUDE_MEM_GEMINI_API_KEY', e.target.value)}
-                      placeholder="Enter Gemini API key..."
-                    />
-                  </FormField>
-                  <FormField
-                    label="Gemini Model"
-                    tooltip="Gemini model used for generating observations"
-                  >
-                    <select
-                      value={formState.CLAUDE_MEM_GEMINI_MODEL || 'gemini-2.5-flash-lite'}
-                      onChange={(e) => updateSetting('CLAUDE_MEM_GEMINI_MODEL', e.target.value)}
-                    >
-                      <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (10 RPM free)</option>
-                      <option value="gemini-2.5-flash">gemini-2.5-flash (5 RPM free)</option>
-                      <option value="gemini-3-flash-preview">gemini-3-flash-preview (5 RPM free)</option>
-                    </select>
-                  </FormField>
-                  <div className="toggle-group" style={{ marginTop: '8px' }}>
-                    <ToggleSwitch
-                      id="gemini-rate-limiting"
-                      label="Rate Limiting"
-                      description="Enable for free tier (10-30 RPM). Disable if you have billing set up (1000+ RPM)."
-                      checked={formState.CLAUDE_MEM_GEMINI_RATE_LIMITING_ENABLED === 'true'}
-                      onChange={(checked) => updateSetting('CLAUDE_MEM_GEMINI_RATE_LIMITING_ENABLED', checked ? 'true' : 'false')}
-                    />
-                  </div>
-                </>
-              )}
-
-              {formState.CLAUDE_MEM_PROVIDER === 'openrouter' && (
-                <>
-                  <FormField
-                    label="OpenRouter API Key"
-                    tooltip="Your OpenRouter API key from openrouter.ai (or set OPENROUTER_API_KEY env var)"
-                  >
-                    <input
-                      type="password"
-                      value={formState.CLAUDE_MEM_OPENROUTER_API_KEY || ''}
-                      onChange={(e) => updateSetting('CLAUDE_MEM_OPENROUTER_API_KEY', e.target.value)}
-                      placeholder="Enter OpenRouter API key..."
-                    />
-                  </FormField>
-                  <FormField
-                    label="OpenRouter Model"
-                    tooltip="Model identifier from OpenRouter (e.g., anthropic/claude-3.5-sonnet, google/gemini-2.0-flash-thinking-exp)"
-                  >
-                    <input
-                      type="text"
-                      value={formState.CLAUDE_MEM_OPENROUTER_MODEL || 'xiaomi/mimo-v2-flash:free'}
-                      onChange={(e) => updateSetting('CLAUDE_MEM_OPENROUTER_MODEL', e.target.value)}
-                      placeholder="e.g., xiaomi/mimo-v2-flash:free"
-                    />
-                  </FormField>
-                  <FormField
-                    label="Site URL (Optional)"
-                    tooltip="Your site URL for OpenRouter analytics (optional)"
-                  >
-                    <input
-                      type="text"
-                      value={formState.CLAUDE_MEM_OPENROUTER_SITE_URL || ''}
-                      onChange={(e) => updateSetting('CLAUDE_MEM_OPENROUTER_SITE_URL', e.target.value)}
-                      placeholder="https://yoursite.com"
-                    />
-                  </FormField>
-                  <FormField
-                    label="App Name (Optional)"
-                    tooltip="Your app name for OpenRouter analytics (optional)"
-                  >
-                    <input
-                      type="text"
-                      value={formState.CLAUDE_MEM_OPENROUTER_APP_NAME || 'claude-mem'}
-                      onChange={(e) => updateSetting('CLAUDE_MEM_OPENROUTER_APP_NAME', e.target.value)}
-                      placeholder="claude-mem"
-                    />
-                  </FormField>
-                </>
-              )}
 
               <FormField
                 label="Worker Port"
