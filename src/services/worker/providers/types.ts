@@ -26,6 +26,7 @@ export interface ProviderConfigV1 {
     explicitUrl: string;
     modelPolicy: ModelPolicy;
     fixedModel: string;
+    advancedPortDiscovery: boolean;
     candidatePorts: number[];
   };
   providerProfiles: ProviderProfile[];

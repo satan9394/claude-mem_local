@@ -18,6 +18,7 @@ describe('provider configuration v1', () => {
         explicitUrl: '',
         modelPolicy: 'summary-role',
         fixedModel: '',
+        advancedPortDiscovery: false,
         candidatePorts: [15721],
       },
       providerProfiles: [],
