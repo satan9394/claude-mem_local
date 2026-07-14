@@ -1,5 +1,6 @@
 
 import type { Response } from 'express';
+import type { ProviderId } from './worker/providers/types.js';
 
 export interface ConversationMessage {
   role: 'user' | 'assistant';
@@ -22,7 +23,7 @@ export interface ActiveSession {
   earliestPendingTimestamp: number | null;  
   claimedMessageIds: number[];
   conversationHistory: ConversationMessage[];  
-  currentProvider: 'claude' | 'gemini' | 'openrouter' | null;
+  currentProvider: ProviderId | null;
   consecutiveRestarts: number;
   /**
    * Legacy invalid-output counter. Ordinary non-XML observer output is now
