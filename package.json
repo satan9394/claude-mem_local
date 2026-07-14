@@ -1,6 +1,7 @@
 {
   "name": "claude-mem",
-  "version": "13.11.0",
+  "version": "13.11.0-local.1",
+  "private": true,
   "description": "Memory compression system for Claude Code - persist context across sessions",
   "keywords": [
     "claude",
@@ -105,11 +106,7 @@
     "e2e:server:docker": "bash scripts/e2e-server-docker.sh",
     "check:postinstall-allowlist": "node scripts/check-postinstall-allowlist.js",
     "smoke:clean-room": "node scripts/smoke-clean-room.cjs",
-    "prepublishOnly": "npm run build && node scripts/check-postinstall-allowlist.js",
-    "release": "np",
-    "release:patch": "np patch --no-cleanup",
-    "release:minor": "np minor --no-cleanup",
-    "release:major": "np major --no-cleanup"
+    "prepublishOnly": "npm run build && node scripts/check-postinstall-allowlist.js"
   },
   "np": {
     "yarn": false,

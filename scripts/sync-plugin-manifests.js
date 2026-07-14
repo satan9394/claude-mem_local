@@ -12,6 +12,9 @@ const codexPluginPath = path.join(rootDir, '.codex-plugin', 'plugin.json');
 const bundledCodexPluginPath = path.join(rootDir, 'plugin', '.codex-plugin', 'plugin.json');
 const claudePluginPath = path.join(rootDir, '.claude-plugin', 'plugin.json');
 const bundledClaudePluginPath = path.join(rootDir, 'plugin', '.claude-plugin', 'plugin.json');
+const marketplacePath = path.join(rootDir, '.claude-plugin', 'marketplace.json');
+const pluginPackagePath = path.join(rootDir, 'plugin', 'package.json');
+const openClawPluginPath = path.join(rootDir, 'openclaw', 'openclaw.plugin.json');
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -63,6 +66,15 @@ function syncClaudePlugin(plugin, pkg) {
   };
 }
 
+function syncMarketplace(marketplace, version) {
+  return {
+    ...marketplace,
+    plugins: marketplace.plugins.map((plugin) =>
+      plugin.name === 'claude-mem' ? { ...plugin, version } : plugin
+    ),
+  };
+}
+
 function normalizeAuthorName(author) {
   if (typeof author === 'string') return author;
   if (author && typeof author === 'object' && typeof author.name === 'string') return author.name;
@@ -77,7 +89,17 @@ function normalizeRepositoryUrl(repository) {
 }
 
 function main() {
-  for (const filePath of [packageJsonPath, codexPluginPath, bundledCodexPluginPath, claudePluginPath, bundledClaudePluginPath]) {
+  const requiredPaths = [
+    packageJsonPath,
+    codexPluginPath,
+    bundledCodexPluginPath,
+    claudePluginPath,
+    bundledClaudePluginPath,
+    marketplacePath,
+    pluginPackagePath,
+    openClawPluginPath,
+  ];
+  for (const filePath of requiredPaths) {
     if (!fs.existsSync(filePath)) {
       console.error(`Missing required file: ${filePath}`);
       process.exit(1);
@@ -89,11 +111,17 @@ function main() {
   const bundledCodexPlugin = readJson(bundledCodexPluginPath);
   const claudePlugin = readJson(claudePluginPath);
   const bundledClaudePlugin = readJson(bundledClaudePluginPath);
+  const marketplace = readJson(marketplacePath);
+  const pluginPackage = readJson(pluginPackagePath);
+  const openClawPlugin = readJson(openClawPluginPath);
 
   writeJson(codexPluginPath, syncCodexPlugin(codexPlugin, pkg));
   writeJson(bundledCodexPluginPath, syncCodexPlugin(bundledCodexPlugin, pkg));
   writeJson(claudePluginPath, syncClaudePlugin(claudePlugin, pkg));
   writeJson(bundledClaudePluginPath, syncClaudePlugin(bundledClaudePlugin, pkg));
+  writeJson(marketplacePath, syncMarketplace(marketplace, pkg.version));
+  writeJson(pluginPackagePath, { ...pluginPackage, version: pkg.version });
+  writeJson(openClawPluginPath, { ...openClawPlugin, version: pkg.version });
 
   console.log('✓ Synced plugin manifests from package.json');
 }

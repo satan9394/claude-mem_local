@@ -6,50 +6,37 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
 
+function readJson(relativePath: string): any {
+  return JSON.parse(readFileSync(path.join(projectRoot, relativePath), 'utf-8'));
+}
+
+const versionFiles = [
+  ['plugin/package.json', (value: any) => value.version],
+  ['.claude-plugin/plugin.json', (value: any) => value.version],
+  ['.codex-plugin/plugin.json', (value: any) => value.version],
+  ['plugin/.claude-plugin/plugin.json', (value: any) => value.version],
+  ['plugin/.codex-plugin/plugin.json', (value: any) => value.version],
+  ['.claude-plugin/marketplace.json', (value: any) => value.plugins[0].version],
+  ['openclaw/openclaw.plugin.json', (value: any) => value.version],
+] as const;
+
 describe('Version Consistency', () => {
-  let rootVersion: string;
-
-  it('should read version from root package.json', () => {
-    const packageJsonPath = path.join(projectRoot, 'package.json');
-    expect(existsSync(packageJsonPath)).toBe(true);
-    
-    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
-    expect(packageJson.version).toBeDefined();
-    expect(packageJson.version).toMatch(/^\d+\.\d+\.\d+$/);
-    
-    rootVersion = packageJson.version;
+  it('uses the approved local release version', () => {
+    const rootVersion = readJson('package.json').version;
+    expect(rootVersion).toBe('13.11.0-local.1');
+    expect(rootVersion).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
   });
 
-  it('should have matching version in plugin/package.json', () => {
-    const pluginPackageJsonPath = path.join(projectRoot, 'plugin/package.json');
-    expect(existsSync(pluginPackageJsonPath)).toBe(true);
-    
-    const pluginPackageJson = JSON.parse(readFileSync(pluginPackageJsonPath, 'utf-8'));
-    expect(pluginPackageJson.version).toBe(rootVersion);
-  });
-
-  it('should have matching version in plugin/.claude-plugin/plugin.json', () => {
-    const pluginJsonPath = path.join(projectRoot, 'plugin/.claude-plugin/plugin.json');
-    expect(existsSync(pluginJsonPath)).toBe(true);
-    
-    const pluginJson = JSON.parse(readFileSync(pluginJsonPath, 'utf-8'));
-    expect(pluginJson.version).toBe(rootVersion);
-  });
-
-  it('should have matching version in .claude-plugin/marketplace.json', () => {
-    const marketplaceJsonPath = path.join(projectRoot, '.claude-plugin/marketplace.json');
-    expect(existsSync(marketplaceJsonPath)).toBe(true);
-    
-    const marketplaceJson = JSON.parse(readFileSync(marketplaceJsonPath, 'utf-8'));
-    expect(marketplaceJson.plugins).toBeDefined();
-    expect(marketplaceJson.plugins.length).toBeGreaterThan(0);
-    
-    const claudeMemPlugin = marketplaceJson.plugins.find((p: any) => p.name === 'claude-mem');
-    expect(claudeMemPlugin).toBeDefined();
-    expect(claudeMemPlugin.version).toBe(rootVersion);
+  it('matches every distributable manifest', () => {
+    const rootVersion = readJson('package.json').version;
+    for (const [relativePath, getVersion] of versionFiles) {
+      expect(existsSync(path.join(projectRoot, relativePath))).toBe(true);
+      expect(getVersion(readJson(relativePath))).toBe(rootVersion);
+    }
   });
 
   it('should have version injected into built worker-service.cjs', () => {
+    const rootVersion = readJson('package.json').version;
     const workerServicePath = path.join(projectRoot, 'plugin/scripts/worker-service.cjs');
     
     if (!existsSync(workerServicePath)) {
@@ -59,7 +46,7 @@ describe('Version Consistency', () => {
     
     const workerServiceContent = readFileSync(workerServicePath, 'utf-8');
 
-    const versionPattern = new RegExp(`"${rootVersion.replace(/\./g, '\\.')}"`, 'g');
+    const versionPattern = new RegExp(`"${rootVersion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'g');
     const matches = workerServiceContent.match(versionPattern);
     
     expect(matches).toBeTruthy();
@@ -78,13 +65,14 @@ describe('Version Consistency', () => {
     expect(mcpServerContent.length).toBeGreaterThan(0);
   });
 
-  it('should validate version format is semver compliant', () => {
-    expect(rootVersion).toMatch(/^\d+\.\d+\.\d+$/);
-    
-    const [major, minor, patch] = rootVersion.split('.').map(Number);
-    expect(major).toBeGreaterThanOrEqual(0);
-    expect(minor).toBeGreaterThanOrEqual(0);
-    expect(patch).toBeGreaterThanOrEqual(0);
+  it('cannot publish the upstream npm package', () => {
+    const pkg = readJson('package.json');
+    expect(pkg.private).toBe(true);
+    expect(pkg.scripts.release).toBeUndefined();
+    expect(pkg.scripts['release:patch']).toBeUndefined();
+    expect(pkg.scripts['release:minor']).toBeUndefined();
+    expect(pkg.scripts['release:major']).toBeUndefined();
+    expect(existsSync(path.join(projectRoot, '.github/workflows/npm-publish.yml'))).toBe(false);
   });
 });
 
