@@ -35,6 +35,8 @@ Every candidate must be credential-free loopback HTTP and must return JSON conta
 
 CC Switch resolves the alias, credentials, upstream protocol, and failover. Changing the active Claude provider in CC Switch affects the next Claude-Mem summary without reconfiguring Claude-Mem.
 
+The loopback URL is only the first hop. Prompt data can continue from CC Switch to its currently selected remote model provider. Claude-Mem can verify and audit the local hop but treats the upstream destination as a separate trust boundary; see [security data flow](security-data-flow.md).
+
 If CC Switch is unavailable, the request fails closed with a stable error. Claimed work remains available for the current in-process retry path; Claude-Mem does not silently switch to a different cloud provider.
 
 ## Import choices
