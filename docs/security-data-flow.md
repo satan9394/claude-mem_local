@@ -33,6 +33,8 @@ Loopback Worker (127.0.0.1:37782)
 
 Claude-Mem sends sanitized Anthropic Messages traffic to a credential-free loopback endpoint. CC Switch then chooses the upstream account, model, credentials, protocol, and final model provider. Therefore CC Switch is a local transport and policy hop, not proof that model data remains local. Claude-Mem can verify the loopback hop but cannot independently name CC Switch's current upstream without CC Switch metadata.
 
+At `v13.11.0-local.2` release validation, CC Switch selected **OpenCode Go**. That is observed runtime state, not a baked-in provider: changing the selection in CC Switch changes the final destination for subsequent requests.
+
 ### Direct provider
 
 Claude-Mem sends sanitized traffic to the exact saved provider origin. Remote egress requires explicit configuration; confidential projects and `localOnly` rules can require loopback. Redirects are checked hop by hop and requests fail closed outside policy.

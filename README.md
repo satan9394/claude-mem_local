@@ -71,6 +71,8 @@
 >
 > **会外发 / can leave the machine:** 为生成观察和摘要而构造的模型提示，会先脱敏，再发送到你明确选择的 provider。推荐路径是 `Claude-Mem → 127.0.0.1 CC Switch → CC Switch 当前上游模型供应商`；回环地址只是代理中转，不代表最终目的地也在本机。
 >
+> **本版本验证时 / at release validation:** CC Switch 当前选择的是 **OpenCode Go**；这是运行时状态，之后在 CC Switch 中切换供应商会改变最终目的地。**Cloud Sync disabled / Cloud Sync 已禁用。**
+>
 > **本分支关键安全改动 / key fork security changes:** 三条旧 Claude SDK 提示路径统一发送前脱敏；CC Switch/Direct 路由失败关闭且不静默切换；诊断显式标记 `legacy-loopback-proxy` 的上游去向不可见；Cloud Sync、cmem.ai 上传、PostHog 和自动 GitHub 请求均已移除或硬禁用。查看完整的 **[数据流向与信任边界 / data flow and trust boundaries](docs/security-data-flow.md)**。
 
 > [!IMPORTANT]
