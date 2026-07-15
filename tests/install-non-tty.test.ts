@@ -316,6 +316,12 @@ describe('Install Non-TTY Support', () => {
       expect(cliSource).toContain("provider !== 'cc-switch'");
       expect(cliSource).toContain('claude|gemini|openrouter|cc-switch');
     });
+
+    it('supports an explicit worker auto-start opt-in for suite installers', () => {
+      expect(cliSource).toContain("'auto-start': { type: 'boolean' }");
+      expect(installSource).toContain('autoStart?: boolean');
+      expect(installSource).toContain('(!isInteractive && !options.autoStart)');
+    });
   });
 
   describe('runtime selection', () => {

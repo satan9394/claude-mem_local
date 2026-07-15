@@ -26,6 +26,7 @@ ${styleText('bold', 'Install Commands')} (no Bun required):
   ${styleText('cyan', 'npx claude-mem install --provider claude|gemini|openrouter|cc-switch')}   Set LLM provider non-interactively
   ${styleText('cyan', 'npx claude-mem install --model <id>')}   Set Claude model (when provider=claude)
   ${styleText('cyan', 'npx claude-mem install --no-auto-start')}   Skip worker auto-start at the end
+  ${styleText('cyan', 'npx claude-mem install --auto-start')}      Explicitly start the worker in non-interactive installs
   ${styleText('cyan', 'npx claude-mem install --disable-auto-memory')}   Explicitly disable Claude Code native auto-memory
   ${styleText('cyan', 'npx claude-mem install --runtime worker|server')}   Select runtime non-interactively (server brings up Docker pg+redis, generates an API key, injects the IDE MCP config)
   ${styleText('cyan', 'npx claude-mem install --runtime server --server-url <url>')}   Point the server runtime at a specific base URL
@@ -69,6 +70,7 @@ function parseInstallOptions(argv: string[]): InstallOptions {
       runtime: { type: 'string' },
       'server-url': { type: 'string' },
       'no-auto-start': { type: 'boolean' },
+      'auto-start': { type: 'boolean' },
       'disable-auto-memory': { type: 'boolean' },
     },
     strict: false,
@@ -91,6 +93,7 @@ function parseInstallOptions(argv: string[]): InstallOptions {
     provider: provider as InstallOptions['provider'],
     model: flag('model'),
     noAutoStart: values['no-auto-start'] === true,
+    autoStart: values['auto-start'] === true,
     disableAutoMemory: values['disable-auto-memory'] === true,
     runtime: runtime as InstallOptions['runtime'],
     serverUrl: flag('server-url'),

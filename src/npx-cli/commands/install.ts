@@ -1221,6 +1221,7 @@ export interface InstallOptions {
   provider?: 'claude' | 'gemini' | 'openrouter' | 'cc-switch';
   model?: string;
   noAutoStart?: boolean;
+  autoStart?: boolean;
   disableAutoMemory?: boolean;
   // #2543 — non-interactive runtime selection. `server` is the operator-facing
   // alias for the canonical `server-beta` runtime id.
@@ -1503,7 +1504,9 @@ async function runInstallCommandInner(options: InstallOptions, summary: InstallS
   // `claude-mem server start`), NOT the worker-service spawner. Skip the
   // worker-only autostart entirely so the server runtime never invokes the
   // worker path (#2543).
-  const autoStartSkipped = !isInteractive || options.noAutoStart || selectedRuntime === 'server';
+  const autoStartSkipped = options.noAutoStart
+    || selectedRuntime === 'server'
+    || (!isInteractive && !options.autoStart);
 
   await runTasks([
     {
@@ -1513,7 +1516,7 @@ async function runInstallCommandInner(options: InstallOptions, summary: InstallS
           return `Server runtime selected — start it with ${styleText('bold', 'npx claude-mem server start')} ${styleText('dim', '(or via Docker compose)')}`;
         }
         if (autoStartSkipped) {
-          return isInteractive
+          return isInteractive || options.autoStart
             ? `Skipped (--no-auto-start)`
             : `Skipped (non-TTY)`;
         }
