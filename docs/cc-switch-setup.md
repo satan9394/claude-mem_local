@@ -29,15 +29,18 @@ Every candidate must be credential-free loopback HTTP and must return JSON conta
 - Summaries use `POST /v1/messages` with Anthropic Messages JSON.
 - `/v1/chat/completions` and `/v1/models` are never used in auto-follow mode.
 - The client sends only the placeholder `x-api-key: PROXY_MANAGED`. It does not read, copy, log, or persist CC Switch's real provider key.
+- `follow-session` is recommended: it follows the exact model route most recently used by the same Claude Code session, including an in-session `/model` switch.
 - `summary-role` maps to `claude-haiku-4-5`.
 - `main-role` maps to `claude-sonnet-4-6` for balanced/main work.
 - `fixed-alias` accepts a stable CC Switch alias, including an operator-selected deeper model alias.
 
 CC Switch resolves the alias, credentials, upstream protocol, and failover. Changing the active Claude provider in CC Switch affects the next Claude-Mem summary without reconfiguring Claude-Mem.
 
+In `follow-session` mode, UserPromptSubmit stores the prompt but does not start model inference. PostToolUse or Stop runs after CC Switch has seen the current Claude request, so the first Claude-Mem call after `/model` uses the new route. CC Switch keeps only a bounded in-memory `session ID → requested model` map and removes Claude-Mem's local session header before forwarding upstream.
+
 The loopback URL is only the first hop. Prompt data can continue from CC Switch to its currently selected remote model provider. Claude-Mem can verify and audit the local hop but treats the upstream destination as a separate trust boundary; see [security data flow](security-data-flow.md).
 
-If CC Switch is unavailable, the request fails closed with a stable error. Claimed work remains available for the current in-process retry path; Claude-Mem does not silently switch to a different cloud provider.
+If CC Switch is unavailable, the request fails closed with a stable error. If the session model has not been observed, CC Switch returns `CC_SWITCH_SESSION_MODEL_UNAVAILABLE` locally and does not contact an upstream provider. Queued work remains available for a later hook; Claude-Mem does not silently switch to a different cloud provider or expensive model.
 
 ## Import choices
 
