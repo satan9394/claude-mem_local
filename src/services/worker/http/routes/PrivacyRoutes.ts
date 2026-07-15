@@ -20,6 +20,7 @@ const privacySettingsSchema = z.object({
 
 interface PrivacyRoutesOptions {
   getConfig: () => ProviderConfigV1;
+  getLegacyClaudeBaseUrl: () => string | undefined;
   saveConfig: (config: ProviderConfigV1) => void;
   audit: { record(input: ProviderAuditInput): void };
 }
@@ -39,8 +40,9 @@ export class PrivacyRoutes extends BaseRouteHandler {
   private handleDiagnostics = this.wrapHandler((req: Request, res: Response): void => {
     const project = PrivacyRoutes.firstString(req.query.project) ?? 'unknown';
     const config = this.options.getConfig();
+    const legacyClaudeBaseUrl = this.options.getLegacyClaudeBaseUrl();
     const classification = ProjectPrivacyPolicy.classify(project, config.privacy);
-    const destination = destinationFor(config);
+    const destination = destinationFor(config, legacyClaudeBaseUrl);
     let allowed = true;
     let code: string | undefined;
     if (destination) {
@@ -51,6 +53,7 @@ export class PrivacyRoutes extends BaseRouteHandler {
         code = error instanceof ProviderConfigError ? error.code : 'PRIVACY_POLICY_BLOCKED';
       }
     }
+    const legacyProxyOpaque = config.providerMode === 'local' && Boolean(destination);
     res.json({
       classification,
       mode: config.providerMode,
@@ -58,6 +61,10 @@ export class PrivacyRoutes extends BaseRouteHandler {
       destinationClass: destinationClass(config, destination),
       allowed,
       ...(code ? { code } : {}),
+      ...(legacyProxyOpaque ? {
+        egressVisibility: 'opaque-upstream',
+        warningCode: 'LEGACY_PROXY_UPSTREAM_OPAQUE',
+      } : {}),
     });
   });
 
@@ -96,7 +103,8 @@ export class PrivacyRoutes extends BaseRouteHandler {
   });
 }
 
-function destinationFor(config: ProviderConfigV1): string | undefined {
+function destinationFor(config: ProviderConfigV1, legacyClaudeBaseUrl: string | undefined): string | undefined {
+  if (config.providerMode === 'local') return legacyClaudeBaseUrl;
   if (config.providerMode === 'cc-switch-auto') return config.ccSwitch.explicitUrl || 'http://127.0.0.1:15721';
   if (config.providerMode === 'direct') {
     return config.providerProfiles.find(profile => profile.id === config.activeProviderProfileId)?.baseUrl;
@@ -105,7 +113,10 @@ function destinationFor(config: ProviderConfigV1): string | undefined {
 }
 
 function destinationClass(config: ProviderConfigV1, destination: string | undefined): string {
-  if (config.providerMode === 'local') return 'legacy-local-mode';
+  if (config.providerMode === 'local') {
+    if (!destination) return 'legacy-local-mode';
+    return isLoopbackUrl(destination) ? 'legacy-loopback-proxy' : 'legacy-remote-gateway';
+  }
   if (!destination) return 'unconfigured';
   return isLoopbackUrl(destination) ? 'loopback' : 'remote';
 }

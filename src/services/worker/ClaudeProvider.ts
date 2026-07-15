@@ -30,6 +30,7 @@ import { ClassifiedProviderError } from './provider-errors.js';
 import { resolveTierAlias } from './model-aliases.js';
 import { telemetryBuffer } from '../telemetry/buffer.js';
 import { clearDependencyStatus, recordClaudeCliSetupRequired } from '../../shared/dependency-health.js';
+import { PayloadSanitizer } from './security/PayloadSanitizer.js';
 
 /**
  * Module-scoped guard so the "effort parameter" hint only fires once per
@@ -42,6 +43,15 @@ import { clearDependencyStatus, recordClaudeCliSetupRequired } from '../../share
 let effortHintLogged = false;
 export function __resetEffortHintLatchForTesting(): void {
   effortHintLogged = false;
+}
+
+export function sanitizeLegacyClaudePrompt(prompt: string): {
+  prompt: string;
+  redactedCount: number;
+  categories: Record<string, number>;
+} {
+  const { payload, report } = PayloadSanitizer.sanitize(prompt);
+  return { prompt: payload, ...report };
 }
 
 /**
@@ -463,9 +473,10 @@ export class ClaudeProvider {
       promptType: isInitPrompt ? 'INIT' : 'CONTINUATION'
     });
 
-    const initPrompt = isInitPrompt
+    const rawInitPrompt = isInitPrompt
       ? buildInitPrompt(session.project, session.contentSessionId, session.userPrompt, mode)
       : buildContinuationPrompt(session.userPrompt, session.lastPromptNumber, session.contentSessionId, mode);
+    const initPrompt = this.sanitizePrompt(rawInitPrompt, session, 'init');
 
     session.conversationHistory.push({ role: 'user', content: initPrompt });
 
@@ -495,7 +506,7 @@ export class ClaudeProvider {
           session.lastPromptNumber = message.prompt_number;
         }
 
-        const obsPrompt = buildObservationPrompt({
+        const rawObsPrompt = buildObservationPrompt({
           id: 0, // Not used in prompt
           tool_name: message.tool_name!,
           tool_input: JSON.stringify(message.tool_input),
@@ -503,6 +514,7 @@ export class ClaudeProvider {
           created_at_epoch: Date.now(),
           cwd: message.cwd
         });
+        const obsPrompt = this.sanitizePrompt(rawObsPrompt, session, 'ingest');
 
         session.conversationHistory.push({ role: 'user', content: obsPrompt });
 
@@ -519,13 +531,14 @@ export class ClaudeProvider {
           isSynthetic: true
         };
       } else if (message.type === 'summarize') {
-        const summaryPrompt = buildSummaryPrompt({
+        const rawSummaryPrompt = buildSummaryPrompt({
           id: session.sessionDbId,
           memory_session_id: session.memorySessionId,
           project: session.project,
           user_prompt: session.userPrompt,
           last_assistant_message: message.last_assistant_message || ''
         }, mode);
+        const summaryPrompt = this.sanitizePrompt(rawSummaryPrompt, session, 'summarize');
 
         session.conversationHistory.push({ role: 'user', content: summaryPrompt });
 
@@ -543,6 +556,19 @@ export class ClaudeProvider {
         };
       }
     }
+  }
+
+  private sanitizePrompt(prompt: string, session: ActiveSession, source: string): string {
+    const sanitized = sanitizeLegacyClaudePrompt(prompt);
+    if (sanitized.redactedCount > 0) {
+      logger.warn('SECURITY', 'Redacted sensitive values before legacy Claude provider egress', {
+        sessionDbId: session.sessionDbId,
+        source,
+        redactedCount: sanitized.redactedCount,
+        categories: sanitized.categories,
+      });
+    }
+    return sanitized.prompt;
   }
 
   private getModelId(): string {
