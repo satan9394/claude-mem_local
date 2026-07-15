@@ -14,6 +14,8 @@ import { ProviderConfigError, providerErrorCodeFromError } from './types.js';
 
 const PROXY_MANAGED = 'PROXY_MANAGED';
 const ANTHROPIC_VERSION = '2023-06-01';
+const CC_SWITCH_USAGE_SOURCE_HEADER = 'x-cc-switch-usage-source';
+const CLAUDE_MEM_USAGE_SOURCE = 'claude-mem';
 
 interface CcSwitchConfig {
   apiKey: typeof PROXY_MANAGED;
@@ -144,6 +146,7 @@ export class CcSwitchProvider extends HttpConversationProvider<CcSwitchConfig> {
             'x-api-key': PROXY_MANAGED,
             'anthropic-version': ANTHROPIC_VERSION,
             'content-type': 'application/json',
+            [CC_SWITCH_USAGE_SOURCE_HEADER]: CLAUDE_MEM_USAGE_SOURCE,
           },
           body: JSON.stringify(sanitized.payload),
           signal,

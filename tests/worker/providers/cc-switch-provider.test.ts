@@ -59,6 +59,7 @@ describe('CcSwitchProvider', () => {
     expect(requests[0].url.pathname).toBe('/v1/messages');
     expect(requests[0].headers.get('x-api-key')).toBe('PROXY_MANAGED');
     expect(requests[0].headers.get('anthropic-version')).toBe('2023-06-01');
+    expect(requests[0].headers.get('x-cc-switch-usage-source')).toBe('claude-mem');
     expect(requests[0].headers.get('authorization')).toBeNull();
     expect(requests[0].body.model).toBe('claude-haiku-4-5');
     expect(JSON.stringify(requests[0].body)).not.toContain('sk-123');

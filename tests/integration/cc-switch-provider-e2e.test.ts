@@ -19,7 +19,7 @@ afterEach(() => {
 
 describe('CC Switch provider integration', () => {
   it('discovers a loopback proxy and uses only its Anthropic Messages surface', async () => {
-    const requests: Array<{ path: string; key: string | null; body: string }> = [];
+    const requests: Array<{ path: string; key: string | null; source: string | null; body: string }> = [];
     const server = Bun.serve({
       hostname: '127.0.0.1',
       port: 0,
@@ -31,6 +31,7 @@ describe('CC Switch provider integration', () => {
         requests.push({
           path: url.pathname,
           key: request.headers.get('x-api-key'),
+          source: request.headers.get('x-cc-switch-usage-source'),
           body: await request.text(),
         });
         return Response.json({
@@ -62,7 +63,9 @@ describe('CC Switch provider integration', () => {
 
     expect(result).toMatchObject({ content: '<observations></observations>', tokensUsed: 6 });
     expect(requests).toHaveLength(1);
-    expect(requests[0]).toMatchObject({ path: '/v1/messages', key: 'PROXY_MANAGED' });
+    expect(requests[0]).toMatchObject({
+      path: '/v1/messages', key: 'PROXY_MANAGED', source: 'claude-mem',
+    });
     expect(requests[0].body).not.toContain('sk-integration-secret');
     expect(requests[0].body).not.toContain('C:\\private\\project');
   });
