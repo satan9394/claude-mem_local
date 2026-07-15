@@ -52,7 +52,7 @@ const providerConfigSchema = z.object({
   legacyProvider: legacyProviderSchema,
   ccSwitch: z.object({
     explicitUrl: ccSwitchUrlSchema,
-    modelPolicy: z.enum(['summary-role', 'main-role', 'fixed-alias']),
+    modelPolicy: z.enum(['summary-role', 'main-role', 'fixed-alias', 'follow-session']),
     fixedModel: z.string().max(200),
     advancedPortDiscovery: z.boolean(),
     candidatePorts: z.array(z.number().int().min(1024).max(65535)).min(1).max(8),

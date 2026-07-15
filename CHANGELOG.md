@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Real-time Claude model following
+
+- Added CC Switch `follow-session` policy so Claude-Mem follows the model route used by the same Claude Code session, including the first request after `/model`.
+- Deferred Claude-Mem initialization until PostToolUse or Stop in follow mode, preventing the memory request from racing ahead of Claude Code's newly selected model.
+- Added fail-closed `CC_SWITCH_SESSION_MODEL_UNAVAILABLE` handling: queued work is retained and no Opus, Sonnet, fixed-alias, or provider fallback is attempted.
+- Kept token attribution isolated: only Claude-Mem traffic is labeled `MEM`; ordinary Claude Code model names and routing remain unchanged.
+
 ## [13.11.0-local.2] - 2026-07-14
 
 ### Data-flow security and visibility

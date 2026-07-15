@@ -82,6 +82,8 @@
 >
 > **Claude-Mem token attribution / Token 消耗标识:** Claude-Mem requests appear as **CC Switch Source: `MEM`**. This label does not change the model name, request model, provider routing, token accounting, or pricing. Ordinary Claude Code requests remain Source `proxy` and keep their original model behavior.
 >
+> **实时模型跟随 / Real-time model follow:** With `ccSwitch.modelPolicy: "follow-session"`, Claude-Mem uses the model route selected by the same Claude Code session—even on the first turn after `/model`. If Claude Code is routed to `deepseek-v4-flash`, the related `MEM` request follows that route. Missing session state fails closed; Claude-Mem never silently falls back to Opus or Sonnet.
+>
 > **Maintainability / 可维护性:** The advisory watcher tracks both **Claude-Mem and CC Switch upstream releases**. A detected release opens a review issue only; compatibility, local-security checks, and human approval remain mandatory before synchronization or publication.
 
 <p align="center">

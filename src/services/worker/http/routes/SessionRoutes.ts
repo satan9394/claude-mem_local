@@ -30,8 +30,21 @@ import { isClassified } from '../../provider-errors.js';
 import { classifyClaudeError } from '../../ClaudeProvider.js';
 import type { ProviderSelection } from '../../providers/ProviderRouter.js';
 import { ProviderRouter } from '../../providers/ProviderRouter.js';
+import { parseProviderConfig } from '../../providers/provider-config.js';
+import type { ProviderConfigV1, ProviderId } from '../../providers/types.js';
 
 const MAX_USER_PROMPT_BYTES = 256 * 1024;
+
+export function shouldDeferCcSwitchGeneratorStart(
+  source: string,
+  providerId: ProviderId,
+  config: ProviderConfigV1,
+): boolean {
+  return source === 'init'
+    && providerId === 'cc-switch'
+    && config.providerMode === 'cc-switch-auto'
+    && config.ccSwitch.modelPolicy === 'follow-session';
+}
 
 /**
  * Collapse session.abortReason onto a closed telemetry enum. The raw value can
@@ -68,6 +81,21 @@ export class SessionRoutes extends BaseRouteHandler {
     if (!session) return;
 
     const selection = this.providerRouter.resolve(session.project);
+
+    if (source === 'init' && selection.id === 'cc-switch') {
+      const settings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
+      const providerConfig = parseProviderConfig(
+        settings.CLAUDE_MEM_PROVIDER_CONFIG,
+        settings.CLAUDE_MEM_PROVIDER,
+      );
+      if (shouldDeferCcSwitchGeneratorStart(source, selection.id, providerConfig)) {
+        logger.debug('SESSION', 'Deferring CC Switch generator until current Claude model is observed', {
+          sessionId: sessionDbId,
+          source,
+        });
+        return;
+      }
+    }
 
     if (!session.generatorPromise) {
       if (selection.id === 'claude') {

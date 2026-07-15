@@ -117,7 +117,7 @@ export interface ProviderConfig {
   legacyProvider: 'claude' | 'gemini' | 'openrouter';
   ccSwitch: {
     explicitUrl: string;
-    modelPolicy: 'summary-role' | 'main-role' | 'fixed-alias';
+    modelPolicy: 'summary-role' | 'main-role' | 'fixed-alias' | 'follow-session';
     fixedModel: string;
     advancedPortDiscovery: boolean;
     candidatePorts: number[];

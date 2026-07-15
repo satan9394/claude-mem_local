@@ -15,6 +15,7 @@ import { ProviderConfigError, providerErrorCodeFromError } from './types.js';
 const PROXY_MANAGED = 'PROXY_MANAGED';
 const ANTHROPIC_VERSION = '2023-06-01';
 const CC_SWITCH_USAGE_SOURCE_HEADER = 'x-cc-switch-usage-source';
+const CC_SWITCH_FOLLOW_SESSION_HEADER = 'x-cc-switch-follow-session';
 const CLAUDE_MEM_USAGE_SOURCE = 'claude-mem';
 
 interface CcSwitchConfig {
@@ -23,6 +24,7 @@ interface CcSwitchConfig {
   baseUrl: string;
   project: string;
   privacy: ProviderConfigV1['privacy'];
+  followSessionId?: string;
 }
 
 interface AnthropicResponse {
@@ -47,6 +49,16 @@ export function classifyCcSwitchError(input: {
   cause: unknown;
 }): ClassifiedProviderError {
   const body = (input.bodyText ?? '').toLowerCase();
+  if (body.includes('cc_switch_session_model_unavailable')) {
+    return new ClassifiedProviderError('CC_SWITCH_SESSION_MODEL_UNAVAILABLE: current Claude model is not available yet', {
+      kind: 'session_model_unavailable', cause: input.cause,
+    });
+  }
+  if (body.includes('cc_switch_follow_session_invalid')) {
+    return new ClassifiedProviderError('CC_SWITCH_FOLLOW_SESSION_INVALID: session identity was rejected', {
+      kind: 'unrecoverable', cause: input.cause,
+    });
+  }
   if (body.includes('quota exceeded') || body.includes('insufficient credits') || body.includes('insufficient_quota')) {
     return new ClassifiedProviderError('CC_SWITCH_REQUEST_FAILED: upstream quota exhausted', {
       kind: 'quota_exhausted', cause: input.cause,
@@ -102,7 +114,7 @@ export class CcSwitchProvider extends HttpConversationProvider<CcSwitchConfig> {
   }
 
   protected getConfig(session: ActiveSession): Promise<CcSwitchConfig> {
-    return this.resolveConfig(session.project);
+    return this.resolveConfig(session.project, session.contentSessionId);
   }
 
   protected missingApiKeyError(): Error {
@@ -147,6 +159,9 @@ export class CcSwitchProvider extends HttpConversationProvider<CcSwitchConfig> {
             'anthropic-version': ANTHROPIC_VERSION,
             'content-type': 'application/json',
             [CC_SWITCH_USAGE_SOURCE_HEADER]: CLAUDE_MEM_USAGE_SOURCE,
+            ...(config.followSessionId
+              ? { [CC_SWITCH_FOLLOW_SESSION_HEADER]: config.followSessionId }
+              : {}),
           },
           body: JSON.stringify(sanitized.payload),
           signal,
@@ -209,7 +224,7 @@ export class CcSwitchProvider extends HttpConversationProvider<CcSwitchConfig> {
     }
   }
 
-  private async resolveConfig(project: string): Promise<CcSwitchConfig> {
+  private async resolveConfig(project: string, contentSessionId?: string): Promise<CcSwitchConfig> {
     const providerConfig = this.options.getProviderConfig();
     const discovered: CcSwitchDiscoveryResult = await this.options.discovery.discover();
     ProjectPrivacyPolicy.assertAllowed({
@@ -222,13 +237,18 @@ export class CcSwitchProvider extends HttpConversationProvider<CcSwitchConfig> {
       ? 'claude-haiku-4-5'
       : providerConfig.ccSwitch.modelPolicy === 'main-role'
         ? 'claude-sonnet-4-6'
-        : providerConfig.ccSwitch.fixedModel;
+        : providerConfig.ccSwitch.modelPolicy === 'fixed-alias'
+          ? providerConfig.ccSwitch.fixedModel
+          : 'claude-haiku-4-5';
     return {
       apiKey: PROXY_MANAGED,
       model,
       baseUrl: discovered.url,
       project,
       privacy: providerConfig.privacy,
+      ...(providerConfig.ccSwitch.modelPolicy === 'follow-session' && contentSessionId
+        ? { followSessionId: contentSessionId }
+        : {}),
     };
   }
 }

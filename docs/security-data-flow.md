@@ -25,6 +25,7 @@ Loopback Worker (127.0.0.1:37782)
 | Last assistant message | loopback Worker | selected model provider for summary generation | sanitizer and selected provider route |
 | Observations, summaries, prompts, search indexes | local SQLite / FTS5; optional local Chroma | none by built-in sync | Cloud Sync hard disabled |
 | Provider request audit | local SQLite | none | metadata only; no request/response body or secret columns |
+| Session model follow state | CC Switch process memory | none | bounded model name map; no prompt, response, transcript, or persistent session record |
 | Synthetic connection test | selected route | selected model provider | fixed test text only; no project content |
 
 ## Provider destinations
@@ -32,6 +33,8 @@ Loopback Worker (127.0.0.1:37782)
 ### CC Switch auto (recommended)
 
 Claude-Mem sends sanitized Anthropic Messages traffic to a credential-free loopback endpoint. CC Switch then chooses the upstream account, model, credentials, protocol, and final model provider. Therefore CC Switch is a local transport and policy hop, not proof that model data remains local. Claude-Mem can verify the loopback hop but cannot independently name CC Switch's current upstream without CC Switch metadata.
+
+With `modelPolicy: follow-session`, CC Switch records the original model alias from each normal Claude request under its client-provided session identifier. A later request marked `MEM` supplies the same identifier through a local-only header; CC Switch restores that alias before its existing model mapper runs. Normal requests are never rewritten by this feature. The header is stripped before upstream forwarding, and missing state returns local error `CC_SWITCH_SESSION_MODEL_UNAVAILABLE` rather than falling back to another model.
 
 At `v13.11.0-local.2` release validation, CC Switch selected **OpenCode Go**. That is observed runtime state, not a baked-in provider: changing the selection in CC Switch changes the final destination for subsequent requests.
 
