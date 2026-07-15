@@ -28,6 +28,10 @@ import {
   type InstallSummary,
 } from '../install/error-reporter.js';
 import { extractEresolveBlock, isEresolve, runNpmStrict } from '../install/npm-install-helper.js';
+import {
+  createDefaultProviderConfig,
+  serializeProviderConfig,
+} from '../../services/worker/providers/provider-config.js';
 
 function getSetting<K extends keyof SettingsDefaults>(key: K): SettingsDefaults[K] {
   return SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH)[key];
@@ -741,7 +745,7 @@ function mergeSettings(updates: Record<string, string>): boolean {
   }
 }
 
-type ProviderId = 'claude' | 'gemini' | 'openrouter';
+type ProviderId = 'claude' | 'gemini' | 'openrouter' | 'cc-switch';
 type ClaudeAccessMode = 'subscription' | 'api-key';
 type ClaudeApiMode = 'direct' | 'gateway';
 // Phase 1d: Persisted DB literals (`server_beta_schema_migrations`, job_type
@@ -897,6 +901,13 @@ async function promptProvider(options: InstallOptions): Promise<ProviderId> {
     if (wrote) log.info('Saved Claude Agent SDK configuration to ~/.claude-mem/settings.json');
   };
 
+  const persistCcSwitchProvider = () => {
+    const wrote = mergeSettings(buildCcSwitchProviderSettings());
+    if (wrote) {
+      log.info('Configured loopback CC Switch with real-time session model following.');
+    }
+  };
+
   const useSubscriptionAuth = () => {
     persistClaudeProvider('subscription');
     saveClaudeMemEnv({
@@ -1002,6 +1013,10 @@ async function promptProvider(options: InstallOptions): Promise<ProviderId> {
 
   if (!isInteractive) {
     if (options.provider) {
+      if (options.provider === 'cc-switch') {
+        persistCcSwitchProvider();
+        return 'cc-switch';
+      }
       if (options.provider === 'claude') {
         persistClaudeProvider();
         return 'claude';
@@ -1065,6 +1080,7 @@ async function promptProvider(options: InstallOptions): Promise<ProviderId> {
     const providerResult = await p.select<ProviderId>({
       message: 'Which memory provider do you want to use?',
       options: [
+        { value: 'cc-switch', label: 'CC Switch (recommended for the MEM suite)' },
         { value: 'claude', label: 'Claude Agent SDK (recommended)' },
         { value: 'gemini', label: 'Gemini' },
         { value: 'openrouter', label: 'OpenRouter' },
@@ -1081,6 +1097,11 @@ async function promptProvider(options: InstallOptions): Promise<ProviderId> {
   if (selectedProvider === 'claude') {
     await runClaudeAuthFlow();
     return 'claude';
+  }
+
+  if (selectedProvider === 'cc-switch') {
+    persistCcSwitchProvider();
+    return 'cc-switch';
   }
 
   const providerLabel = selectedProvider === 'gemini' ? 'Gemini' : 'OpenRouter';
@@ -1197,7 +1218,7 @@ async function promptClaudeModel(options: InstallOptions): Promise<void> {
 
 export interface InstallOptions {
   ide?: string;
-  provider?: 'claude' | 'gemini' | 'openrouter';
+  provider?: 'claude' | 'gemini' | 'openrouter' | 'cc-switch';
   model?: string;
   noAutoStart?: boolean;
   disableAutoMemory?: boolean;
@@ -1206,6 +1227,20 @@ export interface InstallOptions {
   runtime?: 'worker' | 'server' | 'server-beta';
   // Base URL the server runtime (and the injected IDE MCP config) targets.
   serverUrl?: string;
+}
+
+export function buildCcSwitchProviderSettings(): Pick<
+  SettingsDefaults,
+  'CLAUDE_MEM_PROVIDER' | 'CLAUDE_MEM_PROVIDER_CONFIG'
+> {
+  const config = createDefaultProviderConfig('claude');
+  config.providerMode = 'cc-switch-auto';
+  config.ccSwitch.modelPolicy = 'follow-session';
+  config.ccSwitch.fixedModel = '';
+  return {
+    CLAUDE_MEM_PROVIDER: config.legacyProvider,
+    CLAUDE_MEM_PROVIDER_CONFIG: serializeProviderConfig(config),
+  };
 }
 
 export async function runInstallCommand(options: InstallOptions = {}): Promise<void> {

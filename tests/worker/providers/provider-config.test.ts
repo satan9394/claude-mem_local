@@ -4,6 +4,7 @@ import {
   parseProviderConfig,
   serializeProviderConfig,
 } from '../../../src/services/worker/providers/provider-config';
+import { buildCcSwitchProviderSettings } from '../../../src/npx-cli/commands/install';
 
 describe('provider configuration v1', () => {
   it('defaults to the existing local provider without inventing a profile', () => {
@@ -62,6 +63,24 @@ describe('provider configuration v1', () => {
     config.ccSwitch.modelPolicy = 'follow-session';
 
     expect(parseProviderConfig(serializeProviderConfig(config))).toEqual(config);
+  });
+
+  it('builds the fail-closed one-click installer settings', () => {
+    const settings = buildCcSwitchProviderSettings();
+    const config = parseProviderConfig(
+      settings.CLAUDE_MEM_PROVIDER_CONFIG,
+      settings.CLAUDE_MEM_PROVIDER,
+    );
+
+    expect(config).toMatchObject({
+      providerMode: 'cc-switch-auto',
+      legacyProvider: 'claude',
+      ccSwitch: {
+        explicitUrl: '',
+        modelPolicy: 'follow-session',
+        fixedModel: '',
+      },
+    });
   });
 
   it('rejects unknown fields, duplicate profile ids, and dangling activation', () => {

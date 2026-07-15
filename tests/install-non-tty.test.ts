@@ -11,6 +11,10 @@ const installSourcePath = join(
   'install.ts',
 );
 const installSource = readFileSync(installSourcePath, 'utf-8');
+const cliSource = readFileSync(
+  join(__dirname, '..', 'src', 'npx-cli', 'index.ts'),
+  'utf-8',
+);
 const codexInstallerSourcePath = join(
   __dirname,
   '..',
@@ -305,6 +309,12 @@ describe('Install Non-TTY Support', () => {
     it('exports InstallOptions with optional ide field', () => {
       expect(installSource).toContain('export interface InstallOptions');
       expect(installSource).toContain('ide?: string');
+    });
+
+    it('accepts the maintained CC Switch route non-interactively', () => {
+      expect(installSource).toContain("provider?: 'claude' | 'gemini' | 'openrouter' | 'cc-switch'");
+      expect(cliSource).toContain("provider !== 'cc-switch'");
+      expect(cliSource).toContain('claude|gemini|openrouter|cc-switch');
     });
   });
 
