@@ -80,7 +80,7 @@ The single Claude-Mem upstream record is replaced by `.github/upstream-bases.jso
     "claude-mem": {
       "repository": "thedotmack/claude-mem",
       "releaseTag": "v13.11.0",
-      "commit": "fad1872bd985bc51e314286db4d90b018f5598c3",
+      "commit": "fad1872b81be7de07565ac291418f38c52ee448c",
       "reviewKind": "source-base"
     },
     "cc-switch": {
