@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [13.11.0-local.3] - 2026-07-15
+
 ### Real-time Claude model following
 
 - Added CC Switch `follow-session` policy so Claude-Mem follows the model route used by the same Claude Code session, including the first request after `/model`.
