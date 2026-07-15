@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [13.11.0-local.2] - 2026-07-14
+
+### Data-flow security and visibility
+
+- Applied the shared credential sanitizer to every legacy Claude SDK prompt immediately before egress, covering init/continuation, observation, and summary traffic. Logs contain only redaction counts and categories.
+- Corrected privacy diagnostics and Doctor so a loopback legacy gateway is reported as `legacy-loopback-proxy` with `opaque-upstream` visibility instead of being described as fully local.
+- Made the README first viewport explicitly distinguish local memory storage from model-provider egress, with a bilingual warning and a complete data-flow document.
+- Documented CC Switch as a transport hop whose selected upstream model provider is the final model-data destination.
+
 ## [13.11.0-local.1] - 2026-07-14
 
 ### Claude-Mem Local × CC Switch

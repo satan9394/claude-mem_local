@@ -9,13 +9,16 @@ describe('PrivacyRoutes', () => {
   let server: Server;
   let baseUrl: string;
   let config: ProviderConfigV1;
+  let legacyClaudeBaseUrl: string | undefined;
 
   beforeEach(async () => {
     config = createDefaultProviderConfig();
     config.privacy.localOnly = false;
     config.privacy.defaultClassification = 'internal';
+    legacyClaudeBaseUrl = undefined;
     const routes = new PrivacyRoutes({
       getConfig: () => config,
+      getLegacyClaudeBaseUrl: () => legacyClaudeBaseUrl,
       saveConfig: next => { config = next; },
       audit: { record: () => {} },
     });
@@ -69,6 +72,25 @@ describe('PrivacyRoutes', () => {
     });
     expect(response.status).toBe(204);
     expect(config.privacy.projects).toEqual({});
+  });
+
+  it('warns that a legacy loopback gateway has opaque upstream egress', async () => {
+    legacyClaudeBaseUrl = 'http://127.0.0.1:15721/secret-path';
+
+    const response = await fetch(`${baseUrl}/api/privacy/diagnostics?project=E%3A%5Crepo`);
+    const diagnostics = await response.json() as Record<string, unknown>;
+
+    expect(diagnostics).toEqual({
+      classification: 'internal',
+      mode: 'local',
+      localOnly: false,
+      destinationClass: 'legacy-loopback-proxy',
+      allowed: true,
+      egressVisibility: 'opaque-upstream',
+      warningCode: 'LEGACY_PROXY_UPSTREAM_OPAQUE',
+    });
+    expect(JSON.stringify(diagnostics)).not.toContain('15721');
+    expect(JSON.stringify(diagnostics)).not.toContain('secret-path');
   });
 
   it('changes remote egress only through an explicit strict privacy update', async () => {

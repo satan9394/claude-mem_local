@@ -23,7 +23,7 @@ const versionFiles = [
 describe('Version Consistency', () => {
   it('uses the approved local release version', () => {
     const rootVersion = readJson('package.json').version;
-    expect(rootVersion).toBe('13.11.0-local.1');
+    expect(rootVersion).toBe('13.11.0-local.2');
     expect(rootVersion).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
   });
 

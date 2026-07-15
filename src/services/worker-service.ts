@@ -12,7 +12,7 @@ import { DATA_DIR, DB_PATH, USER_SETTINGS_PATH, ensureDir } from '../shared/path
 import { HOOK_TIMEOUTS } from '../shared/hook-constants.js';
 import { SettingsDefaultsManager } from '../shared/SettingsDefaultsManager.js';
 import { parseJsonWithBom, writeJsonFileAtomic } from '../shared/atomic-json.js';
-import { getAuthMethodDescription } from '../shared/EnvManager.js';
+import { getAuthMethodDescription, loadClaudeMemEnv } from '../shared/EnvManager.js';
 import { logger } from '../utils/logger.js';
 import { ChromaMcpManager } from './sync/ChromaMcpManager.js';
 import { ChromaSync } from './sync/ChromaSync.js';
@@ -384,6 +384,10 @@ export class WorkerService implements WorkerRef {
       audit,
       doctor: async () => {
         const provider = await this.providerHealthService.status();
+        const legacyClaudeBaseUrl = provider.mode === 'local'
+          ? loadClaudeMemEnv().ANTHROPIC_BASE_URL
+          : undefined;
+        const legacyProxyOpaque = Boolean(legacyClaudeBaseUrl);
         const sqliteHealthy = Boolean(this.dbManager.getConnection().query('SELECT 1 AS ok').get());
         const providerHealthy = provider.status === 'healthy';
         return {
@@ -392,7 +396,11 @@ export class WorkerService implements WorkerRef {
             {
               id: 'cc-switch', label: 'CC Switch',
               status: provider.mode !== 'cc-switch-auto' ? 'warn' : providerHealthy ? 'pass' : 'fail',
-              detail: provider.mode !== 'cc-switch-auto' ? 'Not selected' : providerHealthy ? 'Healthy loopback connection' : provider.code,
+              detail: provider.mode !== 'cc-switch-auto'
+                ? legacyProxyOpaque
+                  ? 'Legacy Claude uses a configured gateway; select CC Switch auto for enforced routing'
+                  : 'Not selected'
+                : providerHealthy ? 'Healthy loopback connection' : provider.code,
             },
             { id: 'protocol', label: 'Protocol', status: providerHealthy ? 'pass' : 'fail', detail: providerHealthy ? 'Provider protocol configured' : provider.code },
             { id: 'cloud-sync', label: 'Cloud Sync', status: 'pass', detail: 'Hard disabled' },
@@ -404,8 +412,10 @@ export class WorkerService implements WorkerRef {
               detail: this.dbManager.getChromaSync() ? 'Enabled' : 'Disabled; SQLite search remains available',
             },
             {
-              id: 'egress', label: 'Egress', status: 'pass',
-              detail: this.loadProviderConfig().privacy.localOnly ? 'Loopback only' : 'Explicit endpoint policy enforced',
+              id: 'egress', label: 'Egress', status: legacyProxyOpaque ? 'warn' : 'pass',
+              detail: legacyProxyOpaque
+                ? 'Legacy gateway is loopback, but its upstream egress is opaque; use CC Switch auto'
+                : this.loadProviderConfig().privacy.localOnly ? 'Loopback only' : 'Explicit endpoint policy enforced',
             },
           ],
         };
@@ -413,6 +423,7 @@ export class WorkerService implements WorkerRef {
     }));
     this.server.registerRoutes(new PrivacyRoutes({
       getConfig: () => this.loadProviderConfig(),
+      getLegacyClaudeBaseUrl: () => loadClaudeMemEnv().ANTHROPIC_BASE_URL,
       saveConfig: config => this.saveProviderConfig(config),
       audit,
     }));

@@ -54,16 +54,29 @@
     <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License">
   </a>
   <a href="package.json">
-    <img src="https://img.shields.io/badge/version-13.11.0--local.1-green.svg" alt="Version">
+    <img src="https://img.shields.io/badge/version-13.11.0--local.2-green.svg" alt="Version">
   </a>
   <a href="package.json">
     <img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg" alt="Node">
   </a>
-  <img src="https://img.shields.io/badge/network-local--only-2ea44f.svg" alt="Local-only network policy">
+  <img src="https://img.shields.io/badge/memory-local%20only-2ea44f.svg" alt="Memory stays local">
+  <img src="https://img.shields.io/badge/model%20egress-explicit-orange.svg" alt="Model egress is explicit">
 </p>
 
+> [!CAUTION]
+> ## 本地记忆 ≠ 模型数据不出本机
+> ## LOCAL MEMORY ≠ NO MODEL EGRESS
+>
+> **留在本机 / stays local:** SQLite 记忆、提示、观察、摘要、搜索索引和审计元数据。Cloud Sync 与 telemetry 已硬禁用。
+>
+> **会外发 / can leave the machine:** 为生成观察和摘要而构造的模型提示，会先脱敏，再发送到你明确选择的 provider。推荐路径是 `Claude-Mem → 127.0.0.1 CC Switch → CC Switch 当前上游模型供应商`；回环地址只是代理中转，不代表最终目的地也在本机。
+>
+> **本版本验证时 / at release validation:** CC Switch 当前选择的是 **OpenCode Go**；这是运行时状态，之后在 CC Switch 中切换供应商会改变最终目的地。**Cloud Sync disabled / Cloud Sync 已禁用。**
+>
+> **本分支关键安全改动 / key fork security changes:** 三条旧 Claude SDK 提示路径统一发送前脱敏；CC Switch/Direct 路由失败关闭且不静默切换；诊断显式标记 `legacy-loopback-proxy` 的上游去向不可见；Cloud Sync、cmem.ai 上传、PostHog 和自动 GitHub 请求均已移除或硬禁用。查看完整的 **[数据流向与信任边界 / data flow and trust boundaries](docs/security-data-flow.md)**。
+
 > [!IMPORTANT]
-> This is an independent, source-first fork of [thedotmack/claude-mem](https://github.com/thedotmack/claude-mem), not an official Claude-Mem release. Its defining boundary is local-only operation: Cloud Sync and telemetry are hard-disabled. The only allowed model egress is the provider explicitly selected by the user.
+> This is an independent, source-first fork of [thedotmack/claude-mem](https://github.com/thedotmack/claude-mem), not an official Claude-Mem release. Local-only describes the memory plane, not model-provider traffic. The only allowed model egress is the provider explicitly selected by the user.
 >
 > This first public scope covers local provider routing, privacy controls, diagnostics, and audit metadata. Multi-Agent support and a Cloud Mem replacement are not implemented. Upstream release detection is advisory; synchronization and publication always require security review and human approval.
 
@@ -124,6 +137,7 @@ The upstream documentation describes the inherited core. The following local gui
 - **[CC Switch setup](docs/cc-switch-setup.md)** - Discover and follow a loopback CC Switch provider
 - **[Direct official providers](docs/direct-official-providers.md)** - Configure Anthropic or OpenAI-compatible endpoints
 - **[Local-only security](docs/local-only-security.md)** - Egress, secret-storage, and project-privacy boundaries
+- **[Security data flow](docs/security-data-flow.md)** - Exact local storage, model egress, destinations, and trust boundaries
 - **[Troubleshooting](docs/cc-switch-troubleshooting.md)** - Provider diagnostics and recovery
 
 ### Getting Started

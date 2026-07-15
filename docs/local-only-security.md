@@ -1,6 +1,6 @@
 # Local-only security boundary
 
-This distribution keeps the memory plane local and makes provider egress explicit and reviewable.
+This distribution keeps the memory plane local and makes provider egress explicit and reviewable. **Local memory does not mean model traffic stays on the machine.** See the complete [security data-flow map](security-data-flow.md).
 
 ## Permanently local or disabled
 
@@ -22,11 +22,13 @@ Chroma is separate local search storage. It may be enabled locally or disabled i
 | Direct + `confidential` project | Loopback only | Cannot be bypassed by failover |
 | Legacy compatibility | Existing Claude SDK/Gemini/OpenRouter behavior | Used only when explicitly selected, never as CC/Direct failure fallback |
 
+A loopback gateway such as CC Switch can forward to a remote model provider. Diagnostics therefore distinguish `legacy-loopback-proxy` from genuinely unconfigured legacy mode and report `opaque-upstream` instead of claiming the final destination is local.
+
 Project rules use longest matching path and one of `public`, `internal`, or `confidential`. The default is `internal`. Raw project paths are not returned by privacy diagnostics or saved in provider audit rows.
 
 ## Sanitization
 
-Immediately before provider serialization, `PayloadSanitizer` redacts credential-shaped fields and text, including:
+Immediately before provider serialization, `PayloadSanitizer` redacts credential-shaped fields and text for CC Switch, Direct, and all legacy Claude init/continuation, observation, and summary prompts, including:
 
 - API keys, bearer tokens, JWTs, cookies, and authorization values.
 - `.env` assignments, database URLs, and cloud-provider secrets.
