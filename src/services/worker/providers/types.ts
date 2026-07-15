@@ -1,6 +1,6 @@
 export type ProviderMode = 'local' | 'cc-switch-auto' | 'direct';
 export type ProviderProtocol = 'anthropic' | 'openai-compatible';
-export type ModelPolicy = 'summary-role' | 'main-role' | 'fixed-alias';
+export type ModelPolicy = 'summary-role' | 'main-role' | 'fixed-alias' | 'follow-session';
 export type ProjectClassification = 'public' | 'internal' | 'confidential';
 export type LegacyProviderId = 'claude' | 'gemini' | 'openrouter';
 export type ProviderId = LegacyProviderId | 'cc-switch' | 'direct';
@@ -45,6 +45,8 @@ export const PROVIDER_ERROR_CODES = [
   'CC_SWITCH_UNHEALTHY',
   'CC_SWITCH_PROTOCOL_MISMATCH',
   'CC_SWITCH_REQUEST_FAILED',
+  'CC_SWITCH_SESSION_MODEL_UNAVAILABLE',
+  'CC_SWITCH_FOLLOW_SESSION_INVALID',
   'DIRECT_PROVIDER_REQUEST_FAILED',
   'PRIVACY_POLICY_BLOCKED',
   'EGRESS_BLOCKED',

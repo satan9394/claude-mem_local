@@ -4,8 +4,17 @@ import {
   CcSwitchProvider,
   classifyCcSwitchError,
 } from '../../../src/services/worker/providers/CcSwitchProvider';
+import type { ActiveSession } from '../../../src/services/worker-types';
 
 const servers: Bun.Server<unknown>[] = [];
+
+class TestableCcSwitchProvider extends CcSwitchProvider {
+  requestForSession(session: ActiveSession) {
+    return this.getConfig(session).then(config => this.query([
+      { role: 'user', content: 'remember this' },
+    ], config));
+  }
+}
 
 afterEach(() => {
   for (const server of servers.splice(0)) server.stop(true);
@@ -97,6 +106,89 @@ describe('CcSwitchProvider', () => {
     await provider.request([{ role: 'user', content: 'two' }], 'C:\\work');
 
     expect(models).toEqual(['claude-sonnet-4-6', 'claude-opus-4-8']);
+  });
+
+  it('marks a session-scoped request for real-time model following', async () => {
+    const requests: Array<{ headers: Headers; body: Record<string, unknown> }> = [];
+    const server = Bun.serve({
+      port: 0,
+      hostname: '127.0.0.1',
+      async fetch(request) {
+        requests.push({
+          headers: request.headers,
+          body: await request.json() as Record<string, unknown>,
+        });
+        return Response.json({ content: [] });
+      },
+    });
+    servers.push(server);
+    const config = createDefaultProviderConfig();
+    config.providerMode = 'cc-switch-auto';
+    config.ccSwitch.modelPolicy = 'follow-session';
+    const provider = new TestableCcSwitchProvider({} as never, {} as never, {
+      discovery: { discover: async () => ({ url: `http://127.0.0.1:${server.port}`, source: 'explicit', checkedAt: 1 }) },
+      getProviderConfig: () => config,
+    });
+    const session = {
+      sessionDbId: 1,
+      contentSessionId: 'session-123',
+      memorySessionId: null,
+      project: 'C:\\work',
+      platformSource: 'claude-code',
+      userPrompt: 'remember this',
+      abortController: new AbortController(),
+      generatorPromise: null,
+      lastPromptNumber: 1,
+      startTime: Date.now(),
+      cumulativeInputTokens: 0,
+      cumulativeOutputTokens: 0,
+      earliestPendingTimestamp: null,
+      claimedMessageIds: [],
+      conversationHistory: [],
+      currentProvider: 'cc-switch',
+      consecutiveRestarts: 0,
+      consecutiveInvalidOutputs: 0,
+      lastGeneratorActivity: Date.now(),
+    } satisfies ActiveSession;
+
+    await provider.requestForSession(session);
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0].headers.get('x-cc-switch-usage-source')).toBe('claude-mem');
+    expect(requests[0].headers.get('x-cc-switch-follow-session')).toBe('session-123');
+    expect(requests[0].body.model).toBe('claude-haiku-4-5');
+  });
+
+  it('does not retry a missing session model within the same hook request', async () => {
+    let calls = 0;
+    const server = Bun.serve({
+      port: 0,
+      hostname: '127.0.0.1',
+      fetch() {
+        calls += 1;
+        return Response.json({
+          error: {
+            type: 'CC_SWITCH_SESSION_MODEL_UNAVAILABLE',
+            message: 'model not observed',
+          },
+        }, { status: 409 });
+      },
+    });
+    servers.push(server);
+    const config = createDefaultProviderConfig();
+    config.providerMode = 'cc-switch-auto';
+    const provider = new CcSwitchProvider({} as never, {} as never, {
+      discovery: { discover: async () => ({ url: `http://127.0.0.1:${server.port}`, source: 'explicit', checkedAt: 1 }) },
+      getProviderConfig: () => config,
+    });
+
+    try {
+      await provider.request([{ role: 'user', content: 'one' }], 'C:\\work');
+      throw new Error('expected request to fail');
+    } catch (error) {
+      expect((error as { kind?: string }).kind).toBe('session_model_unavailable');
+    }
+    expect(calls).toBe(1);
   });
 
   it('classifies rate, auth, quota, server, and network failures', () => {

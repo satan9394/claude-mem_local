@@ -56,6 +56,14 @@ describe('provider configuration v1', () => {
     expect(parseProviderConfig(serializeProviderConfig(config))).toEqual(config);
   });
 
+  it('round-trips the explicit follow-session CC Switch policy', () => {
+    const config = createDefaultProviderConfig();
+    config.providerMode = 'cc-switch-auto';
+    config.ccSwitch.modelPolicy = 'follow-session';
+
+    expect(parseProviderConfig(serializeProviderConfig(config))).toEqual(config);
+  });
+
   it('rejects unknown fields, duplicate profile ids, and dangling activation', () => {
     expect(() => parseProviderConfig({
       ...createDefaultProviderConfig(),
