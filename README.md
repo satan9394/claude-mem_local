@@ -79,6 +79,10 @@
 > This is an independent, source-first fork of [thedotmack/claude-mem](https://github.com/thedotmack/claude-mem), not an official Claude-Mem release. Local-only describes the memory plane, not model-provider traffic. The only allowed model egress is the provider explicitly selected by the user.
 >
 > This first public scope covers local provider routing, privacy controls, diagnostics, and audit metadata. Multi-Agent support and a Cloud Mem replacement are not implemented. Upstream release detection is advisory; synchronization and publication always require security review and human approval.
+>
+> **Claude-Mem token attribution / Token 消耗标识:** Claude-Mem requests appear as **CC Switch Source: `MEM`**. This label does not change the model name, request model, provider routing, token accounting, or pricing. Ordinary Claude Code requests remain Source `proxy` and keep their original model behavior.
+>
+> **Maintainability / 可维护性:** The advisory watcher tracks both **Claude-Mem and CC Switch upstream releases**. A detected release opens a review issue only; compatibility, local-security checks, and human approval remain mandatory before synchronization or publication.
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> •
