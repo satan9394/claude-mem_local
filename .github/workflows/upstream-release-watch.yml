@@ -21,53 +21,79 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const base = JSON.parse(fs.readFileSync('.github/upstream-base.json', 'utf8'));
-            const [owner, repo] = base.repository.split('/');
-            const latest = await github.rest.repos.getLatestRelease({ owner, repo });
+            const registry = JSON.parse(fs.readFileSync('.github/upstream-bases.json', 'utf8'));
+            let hadError = false;
 
-            if (latest.data.tag_name === base.tag) {
-              core.info(`Reviewed upstream base is current: ${base.tag}`);
-              return;
+            for (const [component, base] of Object.entries(registry.components)) {
+              try {
+                const [owner, repo] = base.repository.split('/');
+                const latest = await github.rest.repos.getLatestRelease({ owner, repo });
+                const upstreamCommit = await github.rest.repos.getCommit({
+                  owner,
+                  repo,
+                  ref: latest.data.tag_name,
+                });
+
+                if (latest.data.tag_name === base.releaseTag && upstreamCommit.data.sha === base.commit) {
+                  core.info(`${component} reviewed base is current: ${base.releaseTag}`);
+                  continue;
+                }
+
+                const title = `[Upstream ${component}] Review ${latest.data.tag_name}`;
+                const openIssues = await github.rest.issues.listForRepo({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'open',
+                  per_page: 100,
+                });
+                if (openIssues.data.some((issue) => issue.title === title)) {
+                  core.info(`Review issue already exists: ${title}`);
+                  continue;
+                }
+
+                const compareUrl = `https://github.com/${base.repository}/compare/${base.releaseTag}...${latest.data.tag_name}`;
+                const checklist = base.reviewKind === 'compatibility-base'
+                  ? [
+                      '- [ ] Preserve the MEM attribution contract and Source column display',
+                      '- [ ] Keep model, request_model, pricing, routing, tokens, and costs unchanged',
+                      '- [ ] Strip x-cc-switch-usage-source before upstream forwarding',
+                      '- [ ] Verify success and failure usage logging on loopback /v1/messages',
+                    ]
+                  : [
+                      '- [ ] Directly synchronize safe local behavior',
+                      '- [ ] Adapt shared network, installer, provider, or lifecycle behavior',
+                      '- [ ] Reject Cloud Sync, telemetry, implicit egress, plaintext secrets, silent fallback, and fail-open behavior',
+                      '- [ ] Run the complete local-only and release verification gates',
+                    ];
+                const body = [
+                  `A new stable ${component} upstream release requires a security-gated review.`,
+                  '',
+                  `- Upstream: https://github.com/${base.repository}`,
+                  `- Reviewed base: ${base.releaseTag} (${base.commit})`,
+                  `- Latest release: ${latest.data.tag_name} (${upstreamCommit.data.sha})`,
+                  `- Published: ${latest.data.published_at}`,
+                  `- Release notes: ${latest.data.html_url}`,
+                  `- Changes: ${compareUrl}`,
+                  '',
+                  '## Required review',
+                  '',
+                  ...checklist,
+                  '',
+                  'This watcher is advisory only. No merge, install, tag, package, or release automation is authorized.',
+                ].join('\n');
+
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title,
+                  body,
+                });
+              } catch (error) {
+                hadError = true;
+                core.error(`${component} release check failed: ${error.message}`);
+              }
             }
 
-            const title = `[Upstream sync] Review ${latest.data.tag_name}`;
-            const openIssues = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              per_page: 100,
-            });
-            if (openIssues.data.some((issue) => issue.title === title)) {
-              core.info(`Review issue already exists: ${title}`);
-              return;
+            if (hadError) {
+              throw new Error('One or more upstream release checks failed');
             }
-
-            const upstreamCommit = await github.rest.repos.getCommit({
-              owner,
-              repo,
-              ref: latest.data.tag_name,
-            });
-            const body = [
-              'A new stable Claude-Mem upstream release requires a security-gated review.',
-              '',
-              `- Upstream: https://github.com/${base.repository}`,
-              `- Reviewed base: ${base.tag} (${base.commit})`,
-              `- Latest release: ${latest.data.tag_name} (${upstreamCommit.data.sha})`,
-              `- Release notes: ${latest.data.html_url}`,
-              '',
-              '## Required classification',
-              '',
-              '- [ ] Directly synchronize safe local behavior',
-              '- [ ] Adapt shared network, installer, provider, or lifecycle behavior',
-              '- [ ] Reject Cloud Sync, telemetry, implicit egress, plaintext secrets, silent fallback, and fail-open behavior',
-              '- [ ] Run the complete local-only and release verification gates',
-              '',
-              'This watcher is advisory only. No merge, tag, package, or release automation is authorized.',
-            ].join('\n');
-
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title,
-              body,
-            });

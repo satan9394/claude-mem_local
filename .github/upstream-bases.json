@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "components": {
+    "claude-mem": {
+      "repository": "thedotmack/claude-mem",
+      "releaseTag": "v13.11.0",
+      "commit": "fad1872b81be7de07565ac291418f38c52ee448c",
+      "reviewKind": "source-base"
+    },
+    "cc-switch": {
+      "repository": "farion1231/cc-switch",
+      "releaseTag": "v3.17.0",
+      "commit": "3d176b98cc0bfd151a42882e88ab59b62083b92f",
+      "reviewKind": "compatibility-base"
+    }
+  }
+}
