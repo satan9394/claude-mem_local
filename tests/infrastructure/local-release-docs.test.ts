@@ -11,8 +11,11 @@ describe('v13.11.0-local.2 release documentation', () => {
   it('publishes the local version and upgrade policy in repository docs', () => {
     const readme = readFileSync(path.join(projectRoot, 'README.md'), 'utf8');
     const changelog = readFileSync(path.join(projectRoot, 'CHANGELOG.md'), 'utf8');
+    const currentVersion = JSON.parse(
+      readFileSync(path.join(projectRoot, 'package.json'), 'utf8'),
+    ).version as string;
 
-    expect(readme).toContain('version-13.11.0--local.2');
+    expect(readme).toContain(`version-${currentVersion.replaceAll('-', '--')}`);
     expect(readme).toContain('本地记忆 ≠ 模型数据不出本机');
     expect(readme).toContain('LOCAL MEMORY ≠ NO MODEL EGRESS');
     expect(readme).toContain('docs/security-data-flow.md');

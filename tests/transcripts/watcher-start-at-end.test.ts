@@ -20,6 +20,12 @@ import { logger } from '../../src/utils/logger.js';
 import { TranscriptWatcher } from '../../src/services/transcripts/watcher.js';
 
 const waitForAsyncTail = () => new Promise(resolve => setTimeout(resolve, 50));
+const waitForPrompt = async (prompt: string, timeoutMs = 1_000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (!sessionInitCalls.some(call => call.prompt === prompt) && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+};
 
 describe('TranscriptWatcher startAtEnd', () => {
   let tmpRoot: string;
@@ -101,7 +107,7 @@ describe('TranscriptWatcher startAtEnd', () => {
     );
 
     (watcher as any).tailers.get(filePath)?.poke();
-    await waitForAsyncTail();
+    await waitForPrompt('live prompt');
     watcher.stop();
 
     const prompts = sessionInitCalls.map(call => call.prompt);
