@@ -1,6 +1,6 @@
 {
   "name": "claude-mem",
-  "version": "13.11.0-local.3",
+  "version": "13.11.0-local.4",
   "private": true,
   "description": "Memory compression system for Claude Code - persist context across sessions",
   "keywords": [
@@ -58,6 +58,7 @@
   "scripts": {
     "dev": "npm run build-and-sync",
     "build": "node scripts/sync-plugin-manifests.js && node scripts/build-hooks.js && node scripts/gen-plugin-lockfile.cjs",
+    "release:assets": "node scripts/release/build-local-assets.mjs",
     "build-and-sync": "npm run build && npm run sync-marketplace && (cd ~/.claude/plugins/marketplaces/thedotmack && npm run worker:restart)",
     "sync-marketplace": "node scripts/sync-marketplace.cjs",
     "sync-marketplace:force": "node scripts/sync-marketplace.cjs --force",

@@ -48,6 +48,7 @@ docker/install-test/
 
 # Local session report artifacts (not part of distribution)
 reports/
+release-assets/
 
 # ponytail: keep agent implementation worktrees out of release commits
 .worktrees/

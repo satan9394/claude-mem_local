@@ -1,0 +1,30 @@
+name: Release Claude-Mem Local assets
+
+on:
+  push:
+    tags: ['v*-local.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.0'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
+      - run: bun test
+      - run: npm run release:assets
+      - name: Publish reviewed release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME release-assets/* --repo $env:GITHUB_REPOSITORY --title $env:GITHUB_REF_NAME --notes-file "docs/releases/$env:GITHUB_REF_NAME.md"
